@@ -1,0 +1,22 @@
+# Không copy vào image (giảm dung lượng + tránh lộ secret)
+node_modules
+.next
+.git
+.gitignore
+npm-debug.log*
+
+# Secret: KHÔNG bao giờ đưa .env vào image (dùng env_file lúc chạy)
+.env
+.env.*
+!.env.example
+
+# File Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Khác
+*.md
+!README.md
+.vscode
+.idea

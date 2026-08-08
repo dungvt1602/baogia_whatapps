@@ -34,66 +34,66 @@ async function main() {
     },
   });
 
-  // 3) Category -> Template (1-N)
-  const category = await prisma.category.upsert({
-    where: { slug: "bao-gia" },
+  // 3) Kênh gửi (WhatsApp) — api_key_env chỉ là TÊN biến env
+  const channel = await prisma.channel.upsert({
+    where: { type_accountId: { type: "WHATSAPP", accountId: "+84 90 123 4567" } },
     update: {},
-    create: { name: "Báo giá", slug: "bao-gia" },
-  });
-  const template = await prisma.template.create({
-    data: {
-      categoryId: category.id,
-      name: "Mẫu báo giá tiêu chuẩn",
-      subject: "Báo giá từ AGO Exim",
-      body: "Kính gửi Quý khách, đính kèm báo giá...",
+    create: {
+      name: "WhatsApp Business",
+      type: "WHATSAPP",
+      accountId: "+84 90 123 4567",
+      apiKeyEnv: "WHATSAPP_TOKEN_MAIN",
     },
   });
 
-  // 4) Quotation + gán user (N-N qua user_quotations)
-  const quotation = await prisma.quotation.create({
-    data: {
+  // 4) Báo giá + gán user (N-N qua user_quotations)
+  const quotation = await prisma.quotation.upsert({
+    where: { code: "BG-2026-0001" },
+    update: {},
+    create: {
       code: "BG-2026-0001",
-      title: "Báo giá lô hàng mẫu",
-      totalAmount: "15000000",
+      title: "Thanh long ruột đỏ xuất Đức — Q3",
+      totalAmount: "48200000",
       currency: "VND",
       status: "DRAFT",
+      market: "INDIA",
       userQuotations: {
         create: [{ userId: admin.id, roleInQuotation: "OWNER" }],
       },
     },
   });
 
-  // 5) Gửi template cho báo giá (quotation_template_sends)
-  await prisma.quotationTemplateSend.create({
+  // 5) Báo giá -> Template (gắn kênh mặc định). Nội dung có biến tự điền.
+  const template = await prisma.template.create({
     data: {
       quotationId: quotation.id,
-      templateId: template.id,
-      sentTo: "khachhang@example.com",
-      status: "PENDING",
+      channelId: channel.id,
+      name: "Chuẩn quốc tế",
+      icon: "🌐",
+      body:
+        "Kính gửi {khách hàng},\n\nAgo Group xin gửi báo giá {mã} — {tiêu đề}.\n" +
+        "Tổng giá trị: {giá}. Hiệu lực đến {hiệu lực}.\n\nRất mong nhận phản hồi từ Quý công ty.",
     },
   });
 
-  // 6) Customer + audit_log (1-1)
-  const customer = await prisma.customer.create({
-    data: {
-      templateId: template.id,
-      name: "Công ty TNHH ABC",
-      phone: "0900000000",
-      email: "khachhang@example.com",
-      auditLog: {
-        create: {
-          action: "CREATE",
-          newValue: { name: "Công ty TNHH ABC" },
-          changedBy: admin.id,
-        },
-      },
-    },
+  // 6) Template -> nhiều Khách hàng (có whatsapp/status/receiveQuotation)
+  await prisma.customer.createMany({
+    data: [
+      { templateId: template.id, name: "Fresh Orient GmbH", whatsappPhone: "84901234001", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
+      { templateId: template.id, name: "Al Rawabi Trading", whatsappPhone: "84901234002", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
+      { templateId: template.id, name: "Golden Basket Ltd.", whatsappPhone: "84901234003", market: "INDIA", status: "INACTIVE", receiveQuotation: true },
+    ],
   });
+
+  const custCount = await prisma.customer.count({ where: { templateId: template.id } });
 
   console.log("Seed xong:", {
     admin: admin.username,
     quotation: quotation.code,
-    customer: customer.name,
+    template: template.name,
+    templateId: template.id.toString(),
+    customers: custCount,
+    channel: channel.name,
   });
 }
 

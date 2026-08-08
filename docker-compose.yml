@@ -1,0 +1,42 @@
+services:
+  # ---- Ứng dụng Next.js (frontend + backend) ----
+  app:
+    build:
+      context: .
+      target: runner
+    image: ago-baogia
+    env_file: .env # DATABASE_URL, DIRECT_URL, API key các kênh...
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  # ---- Chạy migration lên DB (một lần, không tự khởi động) ----
+  # Dùng: docker compose run --rm migrate
+  migrate:
+    build:
+      context: .
+      target: builder # stage builder có sẵn Prisma CLI + source
+    env_file: .env
+    command: npx prisma migrate deploy
+    profiles: ["tools"]
+
+  # ---- (Tuỳ chọn) Postgres chạy local thay cho Supabase ----
+  # Mặc định KHÔNG chạy. Bật khi muốn dev offline:
+  #   docker compose --profile local-db up
+  # Khi đó sửa .env:
+  #   DATABASE_URL="postgresql://postgres:postgres@db:5432/baogia"
+  #   DIRECT_URL="postgresql://postgres:postgres@db:5432/baogia"
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: baogia
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    profiles: ["local-db"]
+
+volumes:
+  pgdata:

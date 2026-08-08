@@ -1,0 +1,42 @@
+import type { Member, Pending, Tpl, Cust } from "./data";
+
+// Toàn bộ state của app (mirror từ prototype dc).
+export type AgoState = {
+  screen: "login" | "register" | "app";
+  email: string;
+  password: string;
+  role: "staff" | "admin";
+  loginError: boolean;
+  page: string;
+  quoteId: string;
+  filter: string;
+  sentMsg: string;
+  navOpen: boolean;
+  w: number;
+  templateKey: string;
+  regName: string;
+  regEmail: string;
+  regPass: string;
+  regPass2: string;
+  regError: string;
+  regDone: boolean;
+  showPass: boolean;
+  remember: boolean;
+  pending: Pending[];
+  chanOn: { wa: boolean; zalo: boolean; tg: boolean };
+  approvedMsg: string;
+  members: Member[];
+  memberMenu: string;
+  tplQuoteId: string;
+  tplOpen: boolean;
+  tplForm: { id: string; qid: string; name: string; icon: string; content: string };
+  tplMenu: string;
+  quoteTpls: Record<string, Tpl[]>;
+  uOpen: boolean;
+  uForm: { id: string; name: string; email: string; dept: string; role: string };
+  cOpen: boolean;
+  cForm: { id: string; name: string; market: string; tags: string };
+  custList: Cust[];
+  userName: string;
+  userInitials: string;
+};
