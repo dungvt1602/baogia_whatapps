@@ -13,7 +13,7 @@ export async function register() {
   }
 
   const pollMs = Number(process.env.SEND_WORKER_POLL_MS || 8000);
-  const { processNextBatch } = await import("@/lib/send/flow");
+  const { processNextBatch } = await import("@/server/services/sendService");
 
   let running = false;
   setInterval(() => {

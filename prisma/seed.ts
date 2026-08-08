@@ -63,7 +63,18 @@ async function main() {
     },
   });
 
-  // 5) Báo giá -> Template (gắn kênh mặc định). Nội dung có biến tự điền.
+  // 5) Dòng sản phẩm của báo giá (nhiều mặt hàng) + tự tính tổng
+  await prisma.quotationItem.deleteMany({ where: { quotationId: quotation.id } });
+  const items = [
+    { quotationId: quotation.id, no: 1, product: "Thanh long ruột đỏ", packing: "Thùng carton 5kg", unit: "kg", quantity: "12000", price: "3200" },
+    { quotationId: quotation.id, no: 2, product: "Thanh long ruột trắng", packing: "Thùng carton 5kg", unit: "kg", quantity: "8000", price: "2600" },
+    { quotationId: quotation.id, no: 3, product: "Chanh dây", packing: "Thùng 10kg", unit: "kg", quantity: "5000", price: "1800" },
+  ];
+  await prisma.quotationItem.createMany({ data: items });
+  const total = items.reduce((s, it) => s + Number(it.quantity) * Number(it.price), 0);
+  await prisma.quotation.update({ where: { id: quotation.id }, data: { totalAmount: total } });
+
+  // 6) Báo giá -> Template (gắn kênh mặc định). Có biến {bảng sản phẩm}.
   const template = await prisma.template.create({
     data: {
       quotationId: quotation.id,
@@ -71,17 +82,39 @@ async function main() {
       name: "Chuẩn quốc tế",
       icon: "🌐",
       body:
-        "Kính gửi {khách hàng},\n\nAgo Group xin gửi báo giá {mã} — {tiêu đề}.\n" +
-        "Tổng giá trị: {giá}. Hiệu lực đến {hiệu lực}.\n\nRất mong nhận phản hồi từ Quý công ty.",
+        "Kính gửi {khách hàng},\n\nAgo Group xin gửi báo giá {mã} — {tiêu đề}.\n\n" +
+        "{bảng sản phẩm}\n\nTổng giá trị: {tổng}. Hiệu lực đến {hiệu lực}.\n\n" +
+        "Rất mong nhận phản hồi từ Quý công ty.",
     },
   });
 
-  // 6) Template -> nhiều Khách hàng (có whatsapp/status/receiveQuotation)
+  // 7) Template -> nhiều Khách hàng (có whatsapp/status/receiveQuotation)
   await prisma.customer.createMany({
     data: [
       { templateId: template.id, name: "Fresh Orient GmbH", whatsappPhone: "84901234001", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
       { templateId: template.id, name: "Al Rawabi Trading", whatsappPhone: "84901234002", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
       { templateId: template.id, name: "Golden Basket Ltd.", whatsappPhone: "84901234003", market: "INDIA", status: "INACTIVE", receiveQuotation: true },
+    ],
+  });
+
+  // 8) Khách trong KHO (templateId null) — để popup "Thêm khách" có ứng viên kéo-thả
+  await prisma.customer.createMany({
+    data: [
+      { name: "Sunrise Produce Co.", whatsappPhone: "84901234010", market: "USA", status: "ACTIVE", receiveQuotation: true },
+      { name: "Nihon Fruits K.K.", whatsappPhone: "84901234011", market: "JAPAN", status: "ACTIVE", receiveQuotation: true },
+      { name: "Seoul Fresh Mart", whatsappPhone: "84901234012", market: "KOREA", status: "ACTIVE", receiveQuotation: true },
+    ],
+  });
+
+  // 9) Kho sản phẩm dùng chung (menu Sản phẩm)
+  await prisma.product.deleteMany({});
+  await prisma.product.createMany({
+    data: [
+      { name: "Thanh long ruột đỏ", unit: "kg", packing: "Thùng carton 5kg", price: "3200", market: "INDIA" },
+      { name: "Thanh long ruột trắng", unit: "kg", packing: "Thùng carton 5kg", price: "2600", market: "INDIA" },
+      { name: "Chanh dây", unit: "kg", packing: "Thùng 10kg", price: "1800", market: "INDIA" },
+      { name: "Xoài cát Hoà Lộc", unit: "kg", packing: "Thùng 5kg", price: "4200", market: "UAE" },
+      { name: "Dừa tươi gọt vỏ", unit: "trái", packing: "Lưới 9 trái", price: "12000", market: "USA" },
     ],
   });
 

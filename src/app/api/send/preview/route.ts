@@ -1,18 +1,7 @@
-import { previewSend } from "@/lib/send/flow";
-import { jsonBig } from "@/lib/json";
+import { handle } from "@/server/http/json";
+import { previewSend } from "@/server/services/sendService";
+import { previewSchema } from "@/server/validation/send.schema";
 
-// POST /api/send/preview
-// body: { templateId, channelId?, actor?: { id?, name? } }
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const result = await previewSend({
-      templateId: body.templateId,
-      channelId: body.channelId ?? null,
-      actor: body.actor,
-    });
-    return jsonBig(result);
-  } catch (err) {
-    return jsonBig({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
-  }
+export async function POST(req: Request) {
+  return handle(async () => previewSend(previewSchema.parse(await req.json())));
 }

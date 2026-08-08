@@ -17,6 +17,23 @@ CREATE TABLE "channels" (
 );
 
 -- CreateTable
+CREATE TABLE "products" (
+    "id" BIGSERIAL NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
+    "unit" VARCHAR(50),
+    "packing" VARCHAR(150),
+    "price" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "currency" VARCHAR(10) NOT NULL DEFAULT 'VND',
+    "market" VARCHAR(50),
+    "note" TEXT,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(6),
+
+    CONSTRAINT "products_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "users" (
     "id" BIGSERIAL NOT NULL,
     "username" VARCHAR(100) NOT NULL,
@@ -68,6 +85,22 @@ CREATE TABLE "quotations" (
 );
 
 -- CreateTable
+CREATE TABLE "quotation_items" (
+    "id" BIGSERIAL NOT NULL,
+    "quotation_id" BIGINT NOT NULL,
+    "no" INTEGER NOT NULL DEFAULT 0,
+    "product" VARCHAR(255) NOT NULL,
+    "packing" VARCHAR(150),
+    "unit" VARCHAR(50),
+    "quantity" DECIMAL(18,3) NOT NULL DEFAULT 1,
+    "price" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "note" TEXT,
+    "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "quotation_items_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "user_quotations" (
     "user_id" BIGINT NOT NULL,
     "quotation_id" BIGINT NOT NULL,
@@ -97,6 +130,9 @@ CREATE TABLE "templates" (
     "icon" VARCHAR(20),
     "subject" VARCHAR(255),
     "body" TEXT,
+    "wa_template_name" VARCHAR(100),
+    "wa_language" VARCHAR(10) NOT NULL DEFAULT 'vi',
+    "wa_image" BOOLEAN NOT NULL DEFAULT true,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(6),
@@ -121,7 +157,7 @@ CREATE TABLE "quotation_template_sends" (
 -- CreateTable
 CREATE TABLE "customers" (
     "id" BIGSERIAL NOT NULL,
-    "template_id" BIGINT NOT NULL,
+    "template_id" BIGINT,
     "name" VARCHAR(255) NOT NULL,
     "phone" VARCHAR(30),
     "whatsapp_phone" VARCHAR(30),
@@ -157,6 +193,7 @@ CREATE TABLE "send_batches" (
     "channel_id" BIGINT,
     "created_by" BIGINT,
     "recipient_count" INTEGER NOT NULL DEFAULT 0,
+    "media_id" VARCHAR(255),
     "status" VARCHAR(20) NOT NULL DEFAULT 'PREVIEW',
     "note" TEXT,
     "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -203,6 +240,9 @@ CREATE TABLE "activity_logs" (
 CREATE UNIQUE INDEX "channels_type_account_id_key" ON "channels"("type", "account_id");
 
 -- CreateIndex
+CREATE INDEX "products_market_idx" ON "products"("market");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
 
 -- CreateIndex
@@ -213,6 +253,9 @@ CREATE UNIQUE INDEX "roles_code_key" ON "roles"("code");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "quotations_code_key" ON "quotations"("code");
+
+-- CreateIndex
+CREATE INDEX "quotation_items_quotation_id_idx" ON "quotation_items"("quotation_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "categories_slug_key" ON "categories"("slug");
@@ -239,6 +282,9 @@ ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_fkey" FOREIGN KEY ("
 ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "quotation_items" ADD CONSTRAINT "quotation_items_quotation_id_fkey" FOREIGN KEY ("quotation_id") REFERENCES "quotations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "user_quotations" ADD CONSTRAINT "user_quotations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -260,7 +306,7 @@ ALTER TABLE "quotation_template_sends" ADD CONSTRAINT "quotation_template_sends_
 ALTER TABLE "quotation_template_sends" ADD CONSTRAINT "quotation_template_sends_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "customers" ADD CONSTRAINT "customers_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "templates"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "customers" ADD CONSTRAINT "customers_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "templates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "customers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

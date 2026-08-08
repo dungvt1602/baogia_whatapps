@@ -1,28 +1,11 @@
-import { prisma } from "@/lib/prisma";
-import { jsonBig } from "@/lib/json";
+import { handle } from "@/server/http/json";
+import { listUsers, createUser } from "@/server/services/userService";
+import { createUserSchema } from "@/server/validation/user.schema";
 
-// GET /api/users -> lấy danh sách user kèm roles
 export async function GET() {
-  const users = await prisma.user.findMany({
-    include: {
-      userRoles: { include: { role: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  return jsonBig(users);
+  return handle(() => listUsers(), 500);
 }
 
-// POST /api/users -> tạo user mới
-// body: { username, email, passwordHash, fullName? }
-export async function POST(request: Request) {
-  const body = await request.json();
-  const user = await prisma.user.create({
-    data: {
-      username: body.username,
-      email: body.email,
-      passwordHash: body.passwordHash,
-      fullName: body.fullName ?? null,
-    },
-  });
-  return jsonBig(user, { status: 201 });
+export async function POST(req: Request) {
+  return handle(async () => createUser(createUserSchema.parse(await req.json())));
 }

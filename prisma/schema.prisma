@@ -46,6 +46,26 @@ model Channel {
 }
 
 // ============================================================
+// KHO SẢN PHẨM (danh mục dùng chung — giống product rows của bot)
+// ============================================================
+model Product {
+  id        BigInt    @id @default(autoincrement())
+  name      String    @db.VarChar(255) // tên mặt hàng
+  unit      String?   @db.VarChar(50) // đơn vị (kg, thùng...)
+  packing   String?   @db.VarChar(150) // quy cách đóng gói
+  price     Decimal   @default(0) @db.Decimal(18, 2) // đơn giá (sửa được)
+  currency  String    @default("VND") @db.VarChar(10)
+  market    String?   @db.VarChar(50) // thị trường (tuỳ chọn)
+  note      String?   @db.Text
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([market])
+  @@map("products")
+}
+
+// ============================================================
 // NGƯỜI DÙNG & PHÂN QUYỀN
 // ============================================================
 
@@ -119,8 +139,30 @@ model Quotation {
   templates   Template[]
   // 1-N: quotation -> lệnh gửi
   sendBatches SendBatch[]
+  // 1-N: quotation -> dòng sản phẩm (mặt hàng báo giá)
+  items       QuotationItem[]
 
   @@map("quotations")
+}
+
+// Dòng sản phẩm của báo giá (≈ product rows từ sheet của bot).
+// Nhập tên tự do (chưa dùng danh mục chung). Thành tiền = quantity * price.
+model QuotationItem {
+  id          BigInt   @id @default(autoincrement())
+  quotationId BigInt   @map("quotation_id")
+  no          Int      @default(0) // số thứ tự
+  product     String   @db.VarChar(255) // tên mặt hàng
+  packing     String?  @db.VarChar(150) // quy cách đóng gói
+  unit        String?  @db.VarChar(50) // đơn vị
+  quantity    Decimal  @default(1) @db.Decimal(18, 3)
+  price       Decimal  @default(0) @db.Decimal(18, 2) // đơn giá
+  note        String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@map("quotation_items")
 }
 
 // N-N: user <-> báo giá. Khoá chính kép (user_id, quotation_id).
@@ -162,6 +204,10 @@ model Template {
   icon        String?   @db.VarChar(20)
   subject     String?   @db.VarChar(255)
   body        String?   @db.Text // nội dung tin nhắn, có biến {khách hàng}, {mã}, {giá}...
+  // Cấu hình gửi bằng WhatsApp template đã duyệt (giống bot). Trống = gửi text thường.
+  waTemplateName String? @map("wa_template_name") @db.VarChar(100) // tên template Meta đã duyệt
+  waLanguage     String  @default("vi") @map("wa_language") @db.VarChar(10)
+  waImage        Boolean @default(true) @map("wa_image") // gửi kèm ảnh báo giá làm header
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
@@ -202,7 +248,7 @@ model QuotationTemplateSend {
 
 model Customer {
   id               BigInt   @id @default(autoincrement())
-  templateId       BigInt   @map("template_id")
+  templateId       BigInt?  @map("template_id") // null = trong kho, chưa thuộc template nào
   name             String   @db.VarChar(255)
   phone            String?  @db.VarChar(30)
   whatsappPhone    String?  @map("whatsapp_phone") @db.VarChar(30) // số nhận WhatsApp
@@ -213,7 +259,7 @@ model Customer {
   receiveQuotation Boolean  @default(true) @map("receive_quotation") // có nhận báo giá không
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
-  template Template  @relation(fields: [templateId], references: [id])
+  template Template? @relation(fields: [templateId], references: [id])
   // 1-1: customer -> audit_log
   auditLog AuditLog?
   sendJobs SendJob[]
@@ -251,6 +297,7 @@ model SendBatch {
   channelId      BigInt?   @map("channel_id")
   createdBy      BigInt?   @map("created_by")
   recipientCount Int       @default(0) @map("recipient_count")
+  mediaId        String?   @map("media_id") @db.VarChar(255) // WhatsApp media id (ảnh upload 1 lần/lệnh)
   // PREVIEW -> QUEUED -> SENDING -> SENT | PARTIAL_FAILED | CANCELLED
   status         String    @default("PREVIEW") @db.VarChar(20)
   note           String?   @db.Text

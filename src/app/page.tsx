@@ -1,5 +1,6 @@
-import AgoApp from "@/components/ago/AgoApp";
+import { redirect } from "next/navigation";
 
+// Vào "/" -> chuyển tới trang tổng quan (layout (app) sẽ đẩy ra /login nếu chưa đăng nhập).
 export default function Home() {
-  return <AgoApp />;
+  redirect("/tong-quan");
 }

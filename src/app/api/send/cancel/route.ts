@@ -1,13 +1,7 @@
-import { cancelSend } from "@/lib/send/flow";
-import { jsonBig } from "@/lib/json";
+import { handle } from "@/server/http/json";
+import { cancelSend } from "@/server/services/sendService";
+import { cancelSchema } from "@/server/validation/send.schema";
 
-// POST /api/send/cancel  body: { batchId }
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const result = await cancelSend({ batchId: body.batchId });
-    return jsonBig(result);
-  } catch (err) {
-    return jsonBig({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
-  }
+export async function POST(req: Request) {
+  return handle(async () => cancelSend(cancelSchema.parse(await req.json())));
 }

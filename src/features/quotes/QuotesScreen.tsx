@@ -1,0 +1,236 @@
+"use client";
+
+/* eslint-disable @next/next/no-img-element */
+import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { sx, HButton, HInput } from "@/components/common/ui";
+import { getJSON, putJSON } from "@/components/common/api";
+
+type Q = {
+  id: string;
+  code: string;
+  title: string | null;
+  status: string;
+  market: string | null;
+  currency: string;
+  totalAmount: unknown;
+  _count: { templates: number };
+};
+type Item = { id: string; no: number; product: string; packing: string | null; unit: string | null; quantity: unknown; price: unknown };
+type Tpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customers: number } };
+type QDetail = Q & { validUntil: string | null; issuedDate: string | null; items: Item[]; templates: Tpl[] };
+
+type EditItem = { product: string; packing: string; unit: string; quantity: string; price: string };
+
+const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
+const inp = "height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
+const focus = "border-color:#3EA85C; box-shadow:0 0 0 3px rgba(62,168,92,.14)";
+const green = "border:none; border-radius:9px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:13px; font-weight:600; cursor:pointer; padding:0 14px; height:36px;";
+const ghost = "border:1px solid #DCE3DC; border-radius:9px; background:#fff; color:#4A5A4E; font-size:13px; font-weight:600; cursor:pointer; padding:0 12px; height:34px;";
+const num = (v: unknown) => { const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0; };
+const money = (v: unknown, cur: string) => `${num(v).toLocaleString("vi-VN")} ${cur}`;
+const fmtDate = (s: string | null) => (s ? new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(s)) : "—");
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div style={sx("background:#F7FAF7; border:1px solid #EEF2EE; border-radius:12px; padding:12px 14px")}>
+      <div style={sx("font-size:11.5px; color:#8B9A90; font-weight:600; text-transform:uppercase; letter-spacing:.04em")}>{label}</div>
+      <div style={sx("font-size:15px; font-weight:700; color:#14261A; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{value}</div>
+      {sub && <div style={sx("font-size:12px; color:#7B8A80; margin-top:2px")}>{sub}</div>}
+    </div>
+  );
+}
+
+const cell = (flex: number, align: "flex-start" | "flex-end" | "center") =>
+  `display:flex; flex:${flex}; justify-content:${align}; align-items:center; padding:0 10px`;
+
+export default function QuotesScreen() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const m = pathname.match(/^\/bao-gia\/(.+)$/);
+  const selQ = m ? decodeURIComponent(m[1]) : ""; // id TỪ URL
+
+  const [quotations, setQuotations] = useState<Q[]>([]);
+  const [detail, setDetail] = useState<QDetail | null>(null);
+  const [editItems, setEditItems] = useState<EditItem[] | null>(null); // đang sửa sản phẩm
+  const [err, setErr] = useState("");
+
+  const loadList = useCallback(async () => {
+    try { setQuotations(await getJSON<Q[]>("/api/quotations")); } catch (e) { setErr((e as Error).message); }
+  }, []);
+  const loadDetail = useCallback(async (id: string) => {
+    try { setDetail(await getJSON<QDetail>(`/api/quotations/${id}`)); } catch (e) { setErr((e as Error).message); }
+  }, []);
+
+  function openEditor() {
+    const rows = detail?.items ?? [];
+    setEditItems(
+      rows.length
+        ? rows.map((r) => ({ product: r.product, packing: r.packing || "", unit: r.unit || "", quantity: String(num(r.quantity)), price: String(num(r.price)) }))
+        : [{ product: "", packing: "", unit: "", quantity: "1", price: "0" }],
+    );
+  }
+  async function saveEditor() {
+    if (!selQ || !editItems) return;
+    setErr("");
+    try {
+      const items = editItems.filter((i) => i.product.trim()).map((i, idx) => ({ no: idx + 1, ...i }));
+      await putJSON(`/api/quotations/${selQ}/items`, { items });
+      setEditItems(null);
+      await loadDetail(selQ);
+    } catch (e) { setErr((e as Error).message); }
+  }
+
+  useEffect(() => { if (!selQ) loadList(); }, [selQ, loadList]);
+  useEffect(() => {
+    if (!selQ) { setDetail(null); return; }
+    setErr(""); setDetail(null); loadDetail(selQ);
+  }, [selQ, loadDetail]);
+
+  const errBox = err ? <div style={sx("background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px")}>{err}</div> : null;
+
+  // ---------- DANH SÁCH BÁO GIÁ ----------
+  if (!selQ) {
+    return (
+      <div>
+        {errBox}
+        {quotations.length === 0 && <div style={sx(card + "; font-size:13px; color:#8B9A90")}>Chưa có báo giá. Bấm “+ Báo giá mới” hoặc tạo ở màn “Quản lý”.</div>}
+        <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:14px")}>
+          {quotations.map((q) => (
+            <HButton key={q.id} onClick={() => router.push(`/bao-gia/${q.id}`)}
+              s="display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:#fff; border-width:1px; border-style:solid; border-color:#E9EEE9; border-radius:16px; padding:16px; cursor:pointer; transition:border-color .15s, box-shadow .15s"
+              h="border-color:#3EA85C; box-shadow:0 12px 26px -16px rgba(31,116,64,.35)">
+              <div style={sx("width:44px; height:44px; border-radius:12px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>📄</div>
+              <div style={sx("min-width:0; flex:1")}>
+                <div style={sx("font-size:15px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.code}</div>
+                <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.title || "—"} · {q._count.templates} template</div>
+              </div>
+              <div style={sx("text-align:right; flex-shrink:0")}>
+                <div style={sx("font-size:13.5px; font-weight:700; color:#14261A")}>{money(q.totalAmount, q.currency)}</div>
+                <div style={sx("font-size:11.5px; color:#7B8A80")}>{q.market || q.status}</div>
+              </div>
+              <span style={sx("color:#B9C5BC; font-size:18px; flex-shrink:0")}>›</span>
+            </HButton>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- CHI TIẾT BÁO GIÁ ----------
+  return (
+    <div style={sx("max-width:960px")}>
+      <HButton s="display:inline-flex; align-items:center; gap:7px; border:none; background:none; color:#2F8F4E; font-size:13.5px; font-weight:600; cursor:pointer; padding:0; margin-bottom:14px" onClick={() => router.push("/bao-gia")}>‹ Danh sách báo giá</HButton>
+      {errBox}
+
+      {/* Hero */}
+      <div style={sx("border-radius:18px; padding:24px; background:linear-gradient(130deg,#1F7440,#123E24); color:#fff; box-shadow:0 20px 44px -26px rgba(18,62,36,.7)")}>
+        <div style={sx("display:flex; align-items:center; gap:16px")}>
+          <div style={sx("width:60px; height:60px; border-radius:16px; background:rgba(255,255,255,.16); display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0")}>📄</div>
+          <div style={sx("min-width:0; flex:1")}>
+            <div style={sx("font-size:24px; font-weight:700; letter-spacing:-0.02em")}>{detail?.code || "…"}</div>
+            <div style={sx("font-size:13.5px; color:#B7DBC4; margin-top:3px")}>{detail?.title || ""}</div>
+          </div>
+          {detail && <span style={sx("font-size:12px; font-weight:700; background:rgba(255,255,255,.18); color:#fff; padding:6px 13px; border-radius:20px; white-space:nowrap")}>{detail.status}</span>}
+        </div>
+      </div>
+
+      {/* Thẻ thông tin */}
+      <div style={sx("display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:12px; margin-top:14px")}>
+        <Stat label="Tổng giá trị" value={detail ? money(detail.totalAmount, detail.currency) : "—"} />
+        <Stat label="Thị trường" value={detail?.market || "—"} />
+        <Stat label="Hiệu lực đến" value={fmtDate(detail?.validUntil ?? null)} />
+        <Stat label="Ngày phát hành" value={fmtDate(detail?.issuedDate ?? null)} />
+        <Stat label="Số template" value={`${detail?._count.templates ?? 0}`} />
+        <Stat label="Trạng thái" value={detail?.status || "—"} />
+      </div>
+
+      {/* Sản phẩm */}
+      <div style={sx(card + "; margin-top:14px")}>
+        <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
+          <span style={sx("width:4px; height:16px; border-radius:3px; background:linear-gradient(180deg,#3EA85C,#1F7440)")} />
+          <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Sản phẩm ({detail?.items.length ?? 0})</div>
+          <HButton s={ghost} onClick={openEditor}>Sửa sản phẩm</HButton>
+        </div>
+        {(!detail || detail.items.length === 0) && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có sản phẩm. Bấm “Sửa sản phẩm” để thêm.</div>}
+        {detail && detail.items.length > 0 && (
+          <div style={sx("border:1px solid #EEF2EE; border-radius:12px; overflow:hidden")}>
+            <div style={sx("display:flex; background:#EAF3EC; color:#1F7440; font-weight:600; font-size:13px; height:38px; align-items:center")}>
+              <div style={sx(cell(0.5, "center"))}>#</div>
+              <div style={sx(cell(3, "flex-start"))}>Mặt hàng</div>
+              <div style={sx(cell(1.4, "flex-end"))}>SL</div>
+              <div style={sx(cell(1.6, "flex-end"))}>Đơn giá</div>
+              <div style={sx(cell(1.8, "flex-end"))}>Thành tiền</div>
+            </div>
+            {detail.items.map((it, i) => (
+              <div key={it.id} style={sx(`display:flex; font-size:13px; height:42px; align-items:center; background:${i % 2 ? "#F7FAF7" : "#fff"}; border-top:1px solid #F0F3F0`)}>
+                <div style={sx(cell(0.5, "center"))}>{it.no || i + 1}</div>
+                <div style={sx(cell(3, "flex-start") + "; flex-direction:column; align-items:flex-start; justify-content:center")}>
+                  <div style={sx("font-weight:600; color:#14261A")}>{it.product}</div>
+                  {it.packing && <div style={sx("font-size:11px; color:#8B9A90")}>{it.packing}</div>}
+                </div>
+                <div style={sx(cell(1.4, "flex-end"))}>{num(it.quantity).toLocaleString("vi-VN")} {it.unit || ""}</div>
+                <div style={sx(cell(1.6, "flex-end"))}>{money(it.price, detail.currency)}</div>
+                <div style={sx(cell(1.8, "flex-end") + "; font-weight:600; color:#14261A")}>{money(num(it.quantity) * num(it.price), detail.currency)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Template của báo giá */}
+      <div style={sx(card + "; margin-top:14px")}>
+        <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
+          <span style={sx("width:4px; height:16px; border-radius:3px; background:linear-gradient(180deg,#3EA85C,#1F7440)")} />
+          <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Template ({detail?.templates.length ?? 0})</div>
+        </div>
+        {(!detail || detail.templates.length === 0) && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có template. Thêm ở màn “Quản lý”.</div>}
+        <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:8px")}>
+          {detail?.templates.map((t) => (
+            <HButton key={t.id} onClick={() => router.push(`/template/${t.id}`)}
+              s="display:flex; align-items:center; gap:10px; width:100%; text-align:left; border:1px solid #E9EEE9; border-radius:11px; padding:10px 12px; background:#fff; cursor:pointer"
+              h="background:#F7FAF7">
+              <span style={sx("font-size:17px")}>{t.icon || "📄"}</span>
+              <div style={sx("min-width:0; flex:1")}>
+                <div style={sx("font-size:13.5px; font-weight:600; color:#14261A")}>{t.name}</div>
+                <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel?.type || "chưa gắn kênh"}</div>
+              </div>
+              <span style={sx("color:#B9C5BC; font-size:15px")}>›</span>
+            </HButton>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal sửa sản phẩm */}
+      {editItems && (
+        <div style={sx("position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px")}>
+          <div onClick={() => setEditItems(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
+          <div style={sx("position:relative; width:100%; max-width:760px; max-height:88vh; overflow:auto; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
+            <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:14px")}>
+              <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Sản phẩm — {detail?.code}</div>
+              <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setEditItems(null)}>✕</HButton>
+            </div>
+            <div style={sx("display:flex; flex-direction:column; gap:8px")}>
+              {editItems.map((it, i) => (
+                <div key={i} style={sx("display:flex; gap:6px; align-items:center")}>
+                  <span style={sx("width:20px; font-size:12px; color:#8B9A90")}>{i + 1}</span>
+                  <HInput s={`${inp} flex:2.6`} focus={focus} value={it.product} onChange={(e) => setEditItems(editItems.map((x, j) => (j === i ? { ...x, product: e.target.value } : x)))} placeholder="Mặt hàng" />
+                  <HInput s={`${inp} flex:1.4`} focus={focus} value={it.unit} onChange={(e) => setEditItems(editItems.map((x, j) => (j === i ? { ...x, unit: e.target.value } : x)))} placeholder="Đơn vị" />
+                  <HInput s={`${inp} flex:1.1`} focus={focus} value={it.quantity} onChange={(e) => setEditItems(editItems.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))} placeholder="SL" />
+                  <HInput s={`${inp} flex:1.5`} focus={focus} value={it.price} onChange={(e) => setEditItems(editItems.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))} placeholder="Đơn giá" />
+                  <HButton s="width:32px; height:38px; border:1px solid #E4C7C5; border-radius:9px; background:#fff; color:#B3261E; cursor:pointer; flex-shrink:0" onClick={() => setEditItems(editItems.filter((_, j) => j !== i))}>✕</HButton>
+                </div>
+              ))}
+            </div>
+            <HButton s={`${ghost} margin-top:10px`} onClick={() => setEditItems([...editItems, { product: "", packing: "", unit: "", quantity: "1", price: "0" }])}>+ Thêm dòng</HButton>
+            <div style={sx("display:flex; align-items:center; gap:12px; margin-top:16px; padding-top:14px; border-top:1px solid #EDF1ED")}>
+              <div style={sx("flex:1; font-size:14px; color:#3C4A40")}>Tổng: <strong style={sx("color:#14261A")}>{money(editItems.reduce((s, it) => s + num(it.quantity) * num(it.price), 0), detail?.currency || "VND")}</strong></div>
+              <HButton s={green} onClick={saveEditor}>Lưu sản phẩm</HButton>
+              <HButton s={ghost} onClick={() => setEditItems(null)}>Hủy</HButton>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

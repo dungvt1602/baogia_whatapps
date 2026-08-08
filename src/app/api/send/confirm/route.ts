@@ -1,13 +1,7 @@
-import { confirmSend } from "@/lib/send/flow";
-import { jsonBig } from "@/lib/json";
+import { handle } from "@/server/http/json";
+import { confirmSend } from "@/server/services/sendService";
+import { confirmSchema } from "@/server/validation/send.schema";
 
-// POST /api/send/confirm  body: { batchId, actor? }
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const result = await confirmSend({ batchId: body.batchId, actor: body.actor });
-    return jsonBig(result);
-  } catch (err) {
-    return jsonBig({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
-  }
+export async function POST(req: Request) {
+  return handle(async () => confirmSend(confirmSchema.parse(await req.json())));
 }
