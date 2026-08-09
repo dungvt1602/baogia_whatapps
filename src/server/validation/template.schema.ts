@@ -10,6 +10,7 @@ export const createTemplateSchema = z.object({
   channelId: numOrStr.nullish(),
   waTemplateName: z.string().nullish(),
   waLanguage: z.string().optional(),
+  waCategory: z.string().nullish(),
   waImage: z.boolean().optional(),
 });
 export type CreateTemplateInput = z.infer<typeof createTemplateSchema>;

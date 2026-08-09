@@ -22,6 +22,7 @@ type TplDetail = {
   body: string | null;
   waTemplateName: string | null;
   waLanguage: string;
+  waCategory: string | null;
   waImage: boolean;
   createdAt: string;
   quotation: { id: string; code: string; title: string | null; market: string | null; currency: string; totalAmount: unknown; validUntil: string | null } | null;
@@ -39,7 +40,7 @@ type Cust = {
   template?: { id: string; name: string } | null;
 };
 type Ch = { id: string; name: string; type: string };
-type TplForm = { id?: string; name: string; icon: string; body: string; channelId: string; waTemplateName: string };
+type TplForm = { id?: string; name: string; icon: string; body: string; channelId: string; waTemplateName: string; waLanguage: string; waCategory: string };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
 const inp = "height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
@@ -142,17 +143,18 @@ export default function TemplatesScreen() {
   // ---- Tạo / sửa / xóa template ----
   function openCreate() {
     getJSON<Ch[]>("/api/channels").then(setChannels).catch(() => {});
-    setForm({ name: "", icon: "🌐", body: "Kính gửi {khách hàng},\n\n{bảng sản phẩm}\n\nTổng: {tổng}. Hiệu lực đến {hiệu lực}.", channelId: "", waTemplateName: "" });
+    setForm({ name: "", icon: "🌐", body: "", channelId: "", waTemplateName: "", waLanguage: "vi", waCategory: "MARKETING" });
   }
   async function openEdit() {
     if (!detail) return;
     getJSON<Ch[]>("/api/channels").then(setChannels).catch(() => {});
-    setForm({ id: detail.id, name: detail.name, icon: detail.icon || "🌐", body: detail.body || "", channelId: detail.channel?.id || "", waTemplateName: detail.waTemplateName || "" });
+    setForm({ id: detail.id, name: detail.name, icon: detail.icon || "🌐", body: detail.body || "", channelId: detail.channel?.id || "", waTemplateName: detail.waTemplateName || "", waLanguage: detail.waLanguage || "vi", waCategory: detail.waCategory || "MARKETING" });
   }
   async function saveForm() {
-    if (!form?.name) return setErr("Nhập tên template");
+    if (!form?.name) return setErr("Nhập tên hiển thị");
+    if (!form?.waTemplateName) return setErr("Nhập tên template Meta (đã duyệt trên WhatsApp Manager)");
     setErr("");
-    const body = { name: form.name, icon: form.icon, body: form.body, channelId: form.channelId || null, waTemplateName: form.waTemplateName };
+    const body = { name: form.name, icon: form.icon, body: form.body, channelId: form.channelId || null, waTemplateName: form.waTemplateName, waLanguage: form.waLanguage, waCategory: form.waCategory };
     try {
       if (form.id) { await patchJSON(`/api/templates/${form.id}`, body); await loadDetail(form.id); }
       else { const t = await postJSON<{ id: string }>("/api/templates", body); router.push(`/template/${t.id}`); }
@@ -200,10 +202,9 @@ export default function TemplatesScreen() {
           <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>{form.id ? "Sửa template" : "Tạo template"}</div>
           <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setForm(null)}>✕</HButton>
         </div>
-        <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
-          <span style={sx(lbl)}>Tên template *</span>
-          <HInput s={inp} focus={focus} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="VD: Chuẩn quốc tế" />
-        </label>
+        <div style={sx("font-size:12px; color:#7B8A80; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:10px; padding:10px 12px; margin-bottom:14px; line-height:1.5")}>
+          Template WhatsApp phải được <b>tạo & duyệt trên WhatsApp Manager (Meta)</b> trước. Ở đây chỉ khai <b>thông tin template Meta</b> — nội dung & biến do Meta quy định, không sửa ở app.
+        </div>
         <div style={sx("display:flex; gap:10px")}>
           <div style={sx("width:90px")}>
             <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
@@ -213,21 +214,43 @@ export default function TemplatesScreen() {
           </div>
           <div style={sx("flex:1")}>
             <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
-              <span style={sx(lbl)}>Kênh gửi</span>
-              <select value={form.channelId} onChange={(e) => setForm({ ...form, channelId: e.target.value })} style={sx(inp)}>
-                <option value="">— chưa gắn —</option>
-                {channels.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+              <span style={sx(lbl)}>Tên hiển thị *</span>
+              <HInput s={inp} focus={focus} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="VD: Báo giá Ấn Độ" />
+            </label>
+          </div>
+        </div>
+        <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+          <span style={sx(lbl)}>Tên template Meta * (đã duyệt trên WhatsApp Manager)</span>
+          <HInput s={inp} focus={focus} value={form.waTemplateName} onChange={(e) => setForm({ ...form, waTemplateName: e.target.value })} placeholder="daily_quotation_india_image" />
+        </label>
+        <div style={sx("display:flex; gap:10px")}>
+          <div style={sx("width:110px")}>
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+              <span style={sx(lbl)}>Ngôn ngữ</span>
+              <HInput s={inp} focus={focus} value={form.waLanguage} onChange={(e) => setForm({ ...form, waLanguage: e.target.value })} placeholder="vi" />
+            </label>
+          </div>
+          <div style={sx("flex:1")}>
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+              <span style={sx(lbl)}>Danh mục (Meta)</span>
+              <select value={form.waCategory} onChange={(e) => setForm({ ...form, waCategory: e.target.value })} style={sx(inp)}>
+                <option value="MARKETING">MARKETING</option>
+                <option value="UTILITY">UTILITY</option>
+                <option value="AUTHENTICATION">AUTHENTICATION</option>
               </select>
             </label>
           </div>
         </div>
         <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
-          <span style={sx(lbl)}>Nội dung (biến: {"{khách hàng} {mã} {bảng sản phẩm} {tổng} {hiệu lực}"})</span>
-          <HTextarea s="border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:10px 11px; font-size:13.5px; line-height:1.5; color:#14261A; outline:none; resize:vertical; font-family:inherit; width:100%;" focus={focus} rows={5} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+          <span style={sx(lbl)}>Kênh gửi</span>
+          <select value={form.channelId} onChange={(e) => setForm({ ...form, channelId: e.target.value })} style={sx(inp)}>
+            <option value="">— chưa gắn —</option>
+            {channels.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+          </select>
         </label>
         <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
-          <span style={sx(lbl)}>WhatsApp template name (để gửi thật, tuỳ chọn)</span>
-          <HInput s={inp} focus={focus} value={form.waTemplateName} onChange={(e) => setForm({ ...form, waTemplateName: e.target.value })} placeholder="daily_quotation_india_image" />
+          <span style={sx(lbl)}>Nội dung template (dán từ Meta — chỉ để hiển thị)</span>
+          <HTextarea s="border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:10px 11px; font-size:13.5px; line-height:1.5; color:#14261A; outline:none; resize:vertical; font-family:inherit; width:100%;" focus={focus} rows={4} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Kính gửi {{1}}, ... (copy đúng nội dung template trên Meta)" />
         </label>
         <div style={sx("display:flex; gap:10px; margin-top:6px")}>
           <HButton s={`${green} flex:1; height:44px`} onClick={saveForm}>{form.id ? "Lưu thay đổi" : "Tạo template"}</HButton>
@@ -326,7 +349,7 @@ export default function TemplatesScreen() {
         <Stat label="Báo giá" value={detail?.quotation?.code || "—"} sub={detail?.quotation ? money(detail.quotation.totalAmount, detail.quotation.currency) : undefined} />
         <Stat label="Thị trường" value={detail?.quotation?.market || "—"} sub={detail?.quotation?.validUntil ? `Hiệu lực đến ${fmtDate(detail.quotation.validUntil)}` : undefined} />
         <Stat label="Kênh gửi" value={detail?.channel?.name || "Chưa gắn"} sub={detail?.channel?.type} />
-        <Stat label="WhatsApp template" value={detail?.waTemplateName || "— (gửi text)"} sub={detail ? `Ngôn ngữ ${detail.waLanguage}${detail.waImage ? " · kèm ảnh" : ""}` : undefined} />
+        <Stat label="Template Meta" value={detail?.waTemplateName || "— (chưa khai)"} sub={detail ? `${detail.waCategory || "—"} · ${detail.waLanguage}${detail.waImage ? " · kèm ảnh" : ""}` : undefined} />
         <Stat label="Khách nhận" value={`${customers.length} khách`} sub={`${activeCount} ACTIVE · ${receiveCount} nhận báo giá`} />
         <Stat label="Ngày tạo" value={detail ? fmtDate(detail.createdAt) : "—"} />
       </div>
@@ -336,12 +359,12 @@ export default function TemplatesScreen() {
         <div style={sx(card)}>
           <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
             <span style={sx("width:4px; height:16px; border-radius:3px; background:linear-gradient(180deg,#3EA85C,#1F7440)")} />
-            <div style={sx("font-size:15px; font-weight:700; color:#14261A")}>Nội dung tin nhắn</div>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A")}>Nội dung template Meta</div>
           </div>
           <div style={sx("background:#F6F9F6; border:1px solid #E9EEE9; border-radius:13px; padding:15px; font-size:13.5px; line-height:1.75; color:#3C4A40; white-space:pre-wrap")}>
             {detail?.body ? renderBody(detail.body) : <span style={sx("color:#8B9A90")}>Chưa có nội dung.</span>}
           </div>
-          <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Biến trong ngoặc sẽ tự điền theo báo giá & khách khi gửi.</div>
+          <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Nội dung do Meta quy định (chỉ hiển thị). Khi gửi, WhatsApp dùng đúng template đã duyệt + tham số.</div>
         </div>
 
         <div style={sx(card)}>
