@@ -84,6 +84,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   const [imgKey, setImgKey] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [hasImage, setHasImage] = useState<boolean | null>(null);
+  const [skipImage, setSkipImage] = useState(false); // xác nhận gửi không kèm ảnh
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -115,7 +116,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   }, [actorName]);
 
   // Bước 3 -> 4: sang bước điền ảnh
-  function goImage() { setHasImage(null); setImgKey((k) => k + 1); setStep(4); setMaxStep(4); }
+  function goImage() { setHasImage(null); setSkipImage(false); setImgKey((k) => k + 1); setStep(4); setMaxStep(4); }
 
   async function uploadImage(file: File | undefined) {
     if (!file || !selTpl) return;
@@ -330,7 +331,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Ảnh gửi kèm — {selTpl.name}</div>
             <HButton s={ghost} onClick={() => setStep(3)}>‹ Xem lại danh sách</HButton>
           </div>
-          <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Ảnh này gửi vào <b>header</b> của template WhatsApp (giống bot). Có thể bỏ qua nếu template gửi text.</div>
+          <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Ảnh này gửi vào <b>header</b> của template WhatsApp (giống bot). Bắt buộc phải điền ảnh, hoặc tick “Bỏ qua ảnh” nếu template gửi text.</div>
           <input ref={fileRef} type="file" accept="image/*" style={sx("display:none")} onChange={(e) => uploadImage(e.target.files?.[0])} />
           {hasImage !== false ? (
             <>
@@ -347,9 +348,28 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             </div>
           )}
 
-          <div style={sx("display:flex; gap:10px; margin-top:20px")}>
-            <HButton s={`${green} flex:1; height:48px; opacity:${busy || uploading ? ".6" : "1"}`} onClick={doConfirm}>{busy ? "Đang gửi..." : `Gửi cho ${preview.recipients.length} khách`}</HButton>
-          </div>
+          {/* Chưa có ảnh -> phải tick bỏ qua mới cho gửi */}
+          {hasImage === false && (
+            <label style={sx("display:flex; align-items:center; gap:9px; margin-top:14px; cursor:pointer; font-size:13.5px; color:#3C4A40")}>
+              <input type="checkbox" checked={skipImage} onChange={(e) => setSkipImage(e.target.checked)} style={sx("cursor:pointer; width:16px; height:16px")} />
+              Bỏ qua ảnh — gửi không kèm ảnh (template gửi text)
+            </label>
+          )}
+
+          {(() => {
+            const canSend = hasImage === true || skipImage;
+            const blocked = busy || uploading || !canSend;
+            return (
+              <div style={sx("margin-top:20px")}>
+                <HButton s={`${green} width:100%; height:48px; opacity:${blocked ? ".5" : "1"}; pointer-events:${blocked ? "none" : "auto"}`} onClick={doConfirm}>
+                  {busy ? "Đang gửi..." : `Gửi cho ${preview.recipients.length} khách`}
+                </HButton>
+                {!canSend && !busy && !uploading && (
+                  <div style={sx("font-size:12px; color:#B07208; margin-top:8px; text-align:center")}>Cần điền ảnh, hoặc tick “Bỏ qua ảnh” để được gửi.</div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
