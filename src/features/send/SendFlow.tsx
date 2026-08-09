@@ -45,19 +45,21 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
 }
 
 const STEPS = ["Chọn báo giá", "Chọn template", "Danh sách gửi", "Điền ảnh & gửi"];
-function Stepper({ step }: { step: number }) {
+function Stepper({ step, maxStep, onGo }: { step: number; maxStep: number; onGo: (n: number) => void }) {
   return (
     <div style={sx("display:flex; align-items:center; gap:6px; margin-bottom:16px; flex-wrap:wrap")}>
       {STEPS.map((label, i) => {
         const n = i + 1;
         const done = n < step, active = n === step;
+        const canGo = n <= maxStep && n !== step;
         const bg = done ? "#1F7440" : active ? "#EAF3EC" : "#F1F4F1";
         const fg = done ? "#fff" : active ? "#1F7440" : "#9AA7A0";
         return (
           <div key={label} style={sx("display:flex; align-items:center; gap:6px")}>
-            <div style={sx(`display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:20px; background:${active ? "#EAF3EC" : "transparent"}`)}>
+            <div onClick={() => canGo && onGo(n)} title={canGo ? "Sang bước này" : undefined}
+              style={sx(`display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:20px; background:${active ? "#EAF3EC" : "transparent"}; cursor:${canGo ? "pointer" : "default"}`)}>
               <span style={sx(`width:24px; height:24px; border-radius:50%; background:${bg}; color:${fg}; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:700`)}>{done ? "✓" : n}</span>
-              <span style={sx(`font-size:13px; font-weight:600; color:${active ? "#14261A" : "#8B9A90"}`)}>{label}</span>
+              <span style={sx(`font-size:13px; font-weight:600; color:${active ? "#14261A" : canGo ? "#2F8F4E" : "#8B9A90"}; ${canGo ? "text-decoration:underline; text-underline-offset:2px" : ""}`)}>{label}</span>
             </div>
             {n < STEPS.length && <span style={sx("color:#CBD6CD; font-size:14px")}>›</span>}
           </div>
@@ -69,6 +71,7 @@ function Stepper({ step }: { step: number }) {
 
 export default function SendFlow({ actorName }: { actorName?: string }) {
   const [step, setStep] = useState(1);
+  const [maxStep, setMaxStep] = useState(1);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [qErr, setQErr] = useState("");
   const [loadingQ, setLoadingQ] = useState(true);
@@ -97,7 +100,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
 
   // Bước 1 -> 2
   const pickQuotation = useCallback(async (q: Quotation) => {
-    setSelQ(q); setSelTpl(null); setTemplates([]); setPreview(null); setErr(""); setLoadingT(true); setStep(2);
+    setSelQ(q); setSelTpl(null); setTemplates([]); setPreview(null); setErr(""); setLoadingT(true); setStep(2); setMaxStep(2);
     try { setTemplates(await getJSON<Template[]>(`/api/quotations/${q.id}/templates`)); }
     catch (e) { setErr((e as Error).message); }
     finally { setLoadingT(false); }
@@ -106,13 +109,13 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   // Bước 2 -> 3: chọn template + tạo preview (lọc khách, dựng bảng, danh sách gửi)
   const pickTemplate = useCallback(async (t: Template) => {
     setSelTpl(t); setErr(""); setBusy(true);
-    try { setPreview(await postJSON<Preview>("/api/send/preview", { templateId: t.id, actor: { name: actorName } })); setStep(3); }
+    try { setPreview(await postJSON<Preview>("/api/send/preview", { templateId: t.id, actor: { name: actorName } })); setStep(3); setMaxStep(3); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   }, [actorName]);
 
   // Bước 3 -> 4: sang bước điền ảnh
-  function goImage() { setHasImage(null); setImgKey((k) => k + 1); setStep(4); }
+  function goImage() { setHasImage(null); setImgKey((k) => k + 1); setStep(4); setMaxStep(4); }
 
   async function uploadImage(file: File | undefined) {
     if (!file || !selTpl) return;
@@ -153,7 +156,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   }, [batchId]);
 
   function resetAll() {
-    setBatchId(""); setBatch(null); setPreview(null); setSelTpl(null); setSelQ(null); setStep(1); setErr("");
+    setBatchId(""); setBatch(null); setPreview(null); setSelTpl(null); setSelQ(null); setStep(1); setMaxStep(1); setErr("");
   }
 
   const errBox = err ? <div style={sx("background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px")}>{err}</div> : null;
@@ -194,7 +197,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   // ================= Wizard 4 bước =================
   return (
     <div style={sx("max-width:760px")}>
-      <Stepper step={step} />
+      <Stepper step={step} maxStep={maxStep} onGo={setStep} />
       {errBox}
 
       {/* Bước 1: chọn báo giá */}
