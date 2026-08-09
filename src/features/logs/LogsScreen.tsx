@@ -84,7 +84,7 @@ export default function LogsScreen() {
           <span style={sx("position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; color:#9AA7A0")}>🔍</span>
           <HInput s={`${inp} height:34px; padding-left:32px`} focus={focus} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Tìm hành động, người, đối tượng..." />
         </div>
-        <div style={sx("font-size:12.5px; color:#7B8A80")}>{view.length} bản ghi</div>
+        <div style={sx("font-size:12.5px; color:#7B8A80")}>{view.length} bản ghi · 3 ngày gần nhất</div>
         <div style={sx("flex:1")} />
         <HButton s={ghost} onClick={load}>↻ Tải lại</HButton>
         <HButton s={ghost} onClick={exportCsv}>⭳ Excel</HButton>
@@ -127,7 +127,7 @@ export default function LogsScreen() {
         <HButton s={`${ghost} ${curPage <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage - 1)}>‹ Trước</HButton>
         <HButton s={`${ghost} ${curPage >= totalPages ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage + 1)}>Sau ›</HButton>
       </div>
-      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Nhật ký chỉ đọc — ghi tự động khi tạo lệnh, xác nhận gửi, gửi WhatsApp... Bấm tiêu đề cột để sắp xếp.</div>
+      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Chỉ hiển thị <b>3 ngày gần nhất</b>. Mỗi ngày lúc ~2h sáng hệ thống tự dọn log <b>gửi thành công</b> quá 3 ngày (log lỗi được giữ lại). Bấm tiêu đề cột để sắp xếp.</div>
 
       {detail && (
         <div style={sx("position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px")}>

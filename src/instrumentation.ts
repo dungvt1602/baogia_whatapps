@@ -27,4 +27,31 @@ export async function register() {
   }, pollMs);
 
   console.log(`[sendWorker] started, poll ${pollMs}ms`);
+
+  // Dọn nhật ký lúc ~2h sáng (giờ VN): xóa log gửi thành công quá 3 ngày.
+  const { cleanupSuccessLogs } = await import("@/server/services/activityService");
+  let lastCleanupDay = "";
+  const vnNow = () => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false,
+    }).formatToParts(new Date());
+    const o: Record<string, string> = {};
+    parts.forEach((p) => (o[p.type] = p.value));
+    return { day: `${o.year}-${o.month}-${o.day}`, hour: Number(o.hour) };
+  };
+  setInterval(async () => {
+    const { day, hour } = vnNow();
+    if (hour === 2 && lastCleanupDay !== day) {
+      lastCleanupDay = day;
+      try {
+        const n = await cleanupSuccessLogs(3);
+        console.log(`[logCleanup] xóa ${n} log gửi thành công quá 3 ngày`);
+      } catch (err) {
+        console.error("[logCleanup] error:", err);
+      }
+    }
+  }, 15 * 60 * 1000); // kiểm tra mỗi 15 phút
+
+  console.log("[logCleanup] scheduled ~02:00 (Asia/Ho_Chi_Minh)");
 }
