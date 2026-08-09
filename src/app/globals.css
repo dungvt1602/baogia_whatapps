@@ -54,3 +54,17 @@ textarea {
     opacity: 1;
   }
 }
+
+/* Responsive: lưới nhiều cột tự gộp 1 cột trên màn hẹp (override style inline). */
+@media (max-width: 720px) {
+  .ago-collapse {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Bảng có min-width tự cuộn ngang trên mobile (đã bọc overflow:auto). */
+@media (max-width: 640px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+}

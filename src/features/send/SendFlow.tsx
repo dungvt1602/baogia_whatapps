@@ -263,7 +263,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
           {/* Đầu mục */}
           <div style={sx("background:linear-gradient(135deg,#1F7440,#123E24); color:#fff; border-radius:14px; padding:15px 16px")}>
             <div style={sx("font-size:14px; font-weight:700; letter-spacing:.02em")}>📋 BÁO GIÁ {preview.quotation.market || preview.quotation.code}</div>
-            <div style={sx("display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:10px; font-size:12.5px; color:#CDE8D5")}>
+            <div className="ago-collapse" style={sx("display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:10px; font-size:12.5px; color:#CDE8D5")}>
               <div>Mã lệnh: <b style={sx("color:#fff")}>{preview.batch.code}</b></div>
               <div>Số khách nhận: <b style={sx("color:#fff")}>{preview.recipients.length}</b></div>
               <div>Template: <b style={sx("color:#fff")}>{preview.template.name}</b></div>

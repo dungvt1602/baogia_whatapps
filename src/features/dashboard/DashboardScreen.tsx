@@ -69,7 +69,7 @@ export default function DashboardScreen() {
             ))}
           </div>
 
-          <div style={sx("display:grid; grid-template-columns:1.6fr 1fr; gap:14px; margin-top:14px")}>
+          <div className="ago-collapse" style={sx("display:grid; grid-template-columns:1.6fr 1fr; gap:14px; margin-top:14px")}>
             {/* Báo giá gần đây */}
             <div style={sx(card)}>
               <div style={sx("display:flex; align-items:baseline; gap:10px; margin-bottom:8px")}>

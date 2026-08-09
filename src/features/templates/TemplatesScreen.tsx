@@ -424,7 +424,7 @@ export default function TemplatesScreen() {
             </div>
             <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Kéo khách từ cột trái thả vào cột phải, hoặc bấm “＋”. Khách đang ở template khác sẽ được chuyển sang.</div>
 
-            <div style={sx("display:grid; grid-template-columns:1fr 1fr; gap:12px")}>
+            <div className="ago-collapse" style={sx("display:grid; grid-template-columns:1fr 1fr; gap:12px")}>
               <div style={sx("border:1px solid #E9EEE9; border-radius:12px; padding:12px; display:flex; flex-direction:column")}>
                 <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:10px")}>
                   <div style={sx("font-size:13.5px; font-weight:700; color:#14261A; flex:1")}>Khách khả dụng</div>
