@@ -124,7 +124,7 @@ export function useAgo() {
   const active = page === "detail" || page === "template" ? "quotes" : page;
 
   const titles: Record<string, [string, string]> = {
-    dash: ["Tổng quan", "Xin chào, hôm nay có 4 báo giá cần theo dõi"],
+    dash: ["Tổng quan", "Số liệu tổng hợp toàn hệ thống"],
     quotes: ["Báo giá", "Chọn một báo giá để bắt đầu"],
     template: ["Thông tin báo giá", "Người tạo, lịch sử template và chọn mẫu gửi"],
     detail: ["Chi tiết báo giá", "Xem, chỉnh sửa và gửi cho khách hàng"],

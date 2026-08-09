@@ -1,7 +1,5 @@
-"use client";
-import { useAgoCtx } from "@/components/layout/AgoContext";
-import { Dash } from "@/features/mock/Screens";
+import DashboardScreen from "@/features/dashboard/DashboardScreen";
 
 export default function Page() {
-  return <Dash v={useAgoCtx()} />;
+  return <DashboardScreen />;
 }
