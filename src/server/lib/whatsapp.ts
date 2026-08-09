@@ -35,13 +35,15 @@ function apiVersion(): string {
 export async function uploadWhatsAppMedia(opts: {
   token: string;
   phoneNumberId: string;
-  png: ArrayBuffer;
+  bytes: ArrayBuffer;
+  mime?: string;
   filename?: string;
 }): Promise<string> {
+  const mime = opts.mime || "image/png";
   const form = new FormData();
   form.append("messaging_product", "whatsapp");
-  form.append("type", "image/png");
-  form.append("file", new Blob([opts.png], { type: "image/png" }), opts.filename || "quotation.png");
+  form.append("type", mime);
+  form.append("file", new Blob([opts.bytes], { type: mime }), opts.filename || "quotation");
 
   const res = await fetch(`https://graph.facebook.com/${apiVersion()}/${opts.phoneNumberId}/media`, {
     method: "POST",

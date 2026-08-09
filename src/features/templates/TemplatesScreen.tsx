@@ -1,10 +1,10 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, postJSON, patchJSON } from "@/components/common/api";
+import { sx, HButton, HInput, HTextarea } from "@/components/common/ui";
+import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
 
 type Tpl = {
   id: string;
@@ -26,6 +26,7 @@ type TplDetail = {
   createdAt: string;
   quotation: { id: string; code: string; title: string | null; market: string | null; currency: string; totalAmount: unknown; validUntil: string | null } | null;
   channel: { id: string; name: string; type: string; accountId: string } | null;
+  image: { mime: string; updatedAt: string } | null;
   _count: { customers: number };
 };
 type Cust = {
@@ -37,6 +38,8 @@ type Cust = {
   receiveQuotation: boolean;
   template?: { id: string; name: string } | null;
 };
+type Ch = { id: string; name: string; type: string };
+type TplForm = { id?: string; name: string; icon: string; body: string; channelId: string; waTemplateName: string };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
 const inp = "height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
@@ -82,6 +85,9 @@ export default function TemplatesScreen() {
   const [candidates, setCandidates] = useState<Cust[]>([]);
   const [newC, setNewC] = useState<{ name: string; whatsappPhone: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [channels, setChannels] = useState<Ch[]>([]);
+  const [form, setForm] = useState<TplForm | null>(null); // tạo/sửa template
+  const [delT, setDelT] = useState<{ id: string; name: string } | null>(null); // xác nhận xóa template
   const [err, setErr] = useState("");
 
   const loadTemplates = useCallback(async () => {
@@ -131,14 +137,130 @@ export default function TemplatesScreen() {
   }
   function openPopup() { setPopup(true); loadCandidates(selT); }
 
+  // ---- Tạo / sửa / xóa template ----
+  function openCreate() {
+    getJSON<Ch[]>("/api/channels").then(setChannels).catch(() => {});
+    setForm({ name: "", icon: "🌐", body: "Kính gửi {khách hàng},\n\n{bảng sản phẩm}\n\nTổng: {tổng}. Hiệu lực đến {hiệu lực}.", channelId: "", waTemplateName: "" });
+  }
+  async function openEdit() {
+    if (!detail) return;
+    getJSON<Ch[]>("/api/channels").then(setChannels).catch(() => {});
+    setForm({ id: detail.id, name: detail.name, icon: detail.icon || "🌐", body: detail.body || "", channelId: detail.channel?.id || "", waTemplateName: detail.waTemplateName || "" });
+  }
+  async function saveForm() {
+    if (!form?.name) return setErr("Nhập tên template");
+    setErr("");
+    const body = { name: form.name, icon: form.icon, body: form.body, channelId: form.channelId || null, waTemplateName: form.waTemplateName };
+    try {
+      if (form.id) { await patchJSON(`/api/templates/${form.id}`, body); await loadDetail(form.id); }
+      else { const t = await postJSON<{ id: string }>("/api/templates", body); router.push(`/template/${t.id}`); }
+      setForm(null); await loadTemplates();
+    } catch (e) { setErr((e as Error).message); }
+  }
+  async function doDelete() {
+    if (!delT) return;
+    setErr("");
+    try { await sendJSON("DELETE", `/api/templates/${delT.id}`); setDelT(null); await loadTemplates(); router.push("/template"); }
+    catch (e) { setErr((e as Error).message); }
+  }
+
+  // ---- Ảnh header của template (upload/xóa) ----
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  async function onPickImage(file: File | undefined) {
+    if (!file || !selT) return;
+    if (!file.type.startsWith("image/")) return setErr("File phải là ảnh.");
+    if (file.size > 5 * 1024 * 1024) return setErr("Ảnh quá lớn (tối đa 5MB).");
+    setErr(""); setUploading(true);
+    try {
+      const res = await fetch(`/api/templates/${selT}/image`, { method: "POST", headers: { "content-type": file.type }, body: file });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `Lỗi ${res.status}`);
+      await loadDetail(selT);
+    } catch (e) { setErr((e as Error).message); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+  }
+  async function removeImage() {
+    if (!selT) return;
+    setErr("");
+    try { await sendJSON("DELETE", `/api/templates/${selT}/image`); await loadDetail(selT); }
+    catch (e) { setErr((e as Error).message); }
+  }
+
   const errBox = err ? <div style={sx("background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px")}>{err}</div> : null;
+
+  const lbl = "font-size:12px; font-weight:600; color:#3C4A40; margin-bottom:4px";
+  // Modal form dùng chung cho tạo & sửa
+  const formModal = form && (
+    <div style={sx("position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:20px")}>
+      <div onClick={() => setForm(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
+      <div style={sx("position:relative; width:100%; max-width:500px; max-height:88vh; overflow:auto; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
+        <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:16px")}>
+          <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>{form.id ? "Sửa template" : "Tạo template"}</div>
+          <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setForm(null)}>✕</HButton>
+        </div>
+        <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+          <span style={sx(lbl)}>Tên template *</span>
+          <HInput s={inp} focus={focus} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="VD: Chuẩn quốc tế" />
+        </label>
+        <div style={sx("display:flex; gap:10px")}>
+          <div style={sx("width:90px")}>
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+              <span style={sx(lbl)}>Icon</span>
+              <HInput s={inp} focus={focus} value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} placeholder="🌐" />
+            </label>
+          </div>
+          <div style={sx("flex:1")}>
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+              <span style={sx(lbl)}>Kênh gửi</span>
+              <select value={form.channelId} onChange={(e) => setForm({ ...form, channelId: e.target.value })} style={sx(inp)}>
+                <option value="">— chưa gắn —</option>
+                {channels.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.type})</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+        <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+          <span style={sx(lbl)}>Nội dung (biến: {"{khách hàng} {mã} {bảng sản phẩm} {tổng} {hiệu lực}"})</span>
+          <HTextarea s="border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:10px 11px; font-size:13.5px; line-height:1.5; color:#14261A; outline:none; resize:vertical; font-family:inherit; width:100%;" focus={focus} rows={5} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+        </label>
+        <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+          <span style={sx(lbl)}>WhatsApp template name (để gửi thật, tuỳ chọn)</span>
+          <HInput s={inp} focus={focus} value={form.waTemplateName} onChange={(e) => setForm({ ...form, waTemplateName: e.target.value })} placeholder="daily_quotation_india_image" />
+        </label>
+        <div style={sx("display:flex; gap:10px; margin-top:6px")}>
+          <HButton s={`${green} flex:1; height:44px`} onClick={saveForm}>{form.id ? "Lưu thay đổi" : "Tạo template"}</HButton>
+          <HButton s={`${ghost} height:44px`} onClick={() => setForm(null)}>Hủy</HButton>
+        </div>
+      </div>
+    </div>
+  );
+  // Modal xác nhận xóa
+  const delModal = delT && (
+    <div style={sx("position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:20px")}>
+      <div onClick={() => setDelT(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
+      <div style={sx("position:relative; width:100%; max-width:420px; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
+        <div style={sx("font-size:17px; font-weight:700; color:#14261A; margin-bottom:8px")}>Xóa template?</div>
+        <div style={sx("font-size:13.5px; line-height:1.55; color:#4A5A4E; margin-bottom:18px")}>
+          Xóa hẳn <strong style={sx("color:#14261A")}>“{delT.name}”</strong>. Khách hàng của nó sẽ được đưa về kho (không bị xóa). Không thể hoàn tác.
+        </div>
+        <div style={sx("display:flex; gap:10px")}>
+          <HButton s="flex:1; height:44px; border:none; border-radius:11px; background:#B3261E; color:#fff; font-size:14px; font-weight:600; cursor:pointer" onClick={doDelete}>Xóa template</HButton>
+          <HButton s={`${ghost} height:44px`} onClick={() => setDelT(null)}>Hủy</HButton>
+        </div>
+      </div>
+    </div>
+  );
 
   // ---------- DANH SÁCH TEMPLATE ----------
   if (!selT) {
     return (
       <div>
         {errBox}
-        {templates.length === 0 && <div style={sx(card + "; font-size:13px; color:#8B9A90")}>Chưa có template. Tạo ở màn “Quản lý”.</div>}
+        <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:14px")}>
+          <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Tất cả template ({templates.length})</div>
+          <HButton s={green} onClick={openCreate}>+ Tạo template</HButton>
+        </div>
+        {templates.length === 0 && <div style={sx(card + "; font-size:13px; color:#8B9A90")}>Chưa có template. Bấm “+ Tạo template” để tạo mới.</div>}
         <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px")}>
           {templates.map((t) => (
             <HButton key={t.id} onClick={() => openDetail(t.id)}
@@ -153,6 +275,7 @@ export default function TemplatesScreen() {
             </HButton>
           ))}
         </div>
+        {formModal}
       </div>
     );
   }
@@ -175,6 +298,8 @@ export default function TemplatesScreen() {
             <div style={sx("font-size:13.5px; color:#B7DBC4; margin-top:3px")}>{detail?.quotation?.code || ""}{detail?.quotation?.title ? ` · ${detail.quotation.title}` : ""}</div>
           </div>
           {detail?.channel && <span style={sx("font-size:12px; font-weight:700; background:rgba(255,255,255,.18); color:#fff; padding:6px 13px; border-radius:20px; white-space:nowrap")}>{detail.channel.type}</span>}
+          <HButton s="height:34px; border:none; border-radius:9px; background:rgba(255,255,255,.18); color:#fff; font-size:13px; font-weight:600; cursor:pointer; padding:0 14px; flex-shrink:0" onClick={openEdit}>Sửa</HButton>
+          <HButton s="width:34px; height:34px; border:none; border-radius:9px; background:rgba(255,255,255,.14); color:#FFD9D6; font-size:15px; cursor:pointer; flex-shrink:0" title="Xóa template" onClick={() => detail && setDelT({ id: detail.id, name: detail.name })}>🗑</HButton>
         </div>
       </div>
 
@@ -204,14 +329,23 @@ export default function TemplatesScreen() {
         <div style={sx(card)}>
           <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
             <span style={sx("width:4px; height:16px; border-radius:3px; background:linear-gradient(180deg,#3EA85C,#1F7440)")} />
-            <div style={sx("font-size:15px; font-weight:700; color:#14261A")}>Ảnh báo giá</div>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Ảnh header</div>
+            {detail?.image && <HButton s="height:30px; padding:0 10px; border:1px solid #E4C7C5; border-radius:8px; background:#fff; color:#B3261E; font-size:12.5px; font-weight:600; cursor:pointer" onClick={removeImage}>Xóa ảnh</HButton>}
           </div>
-          {detail?.quotation ? (
-            <img src={`/api/quotations/${detail.quotation.id}/image`} alt="Ảnh báo giá" style={sx("width:100%; border:1px solid #E9EEE9; border-radius:12px; display:block")} />
+          <input ref={fileRef} type="file" accept="image/*" style={sx("display:none")} onChange={(e) => onPickImage(e.target.files?.[0])} />
+          {detail?.image ? (
+            <>
+              <img src={`/api/templates/${selT}/image?t=${encodeURIComponent(detail.image.updatedAt)}`} alt="Ảnh header" style={sx("width:100%; border:1px solid #E9EEE9; border-radius:12px; display:block")} />
+              <HButton s={`${ghost} margin-top:10px; width:100%`} onClick={() => fileRef.current?.click()}>{uploading ? "Đang tải..." : "Đổi ảnh"}</HButton>
+            </>
           ) : (
-            <div style={sx("font-size:13px; color:#8B9A90")}>Chưa gắn báo giá.</div>
+            <div onClick={() => fileRef.current?.click()} style={sx("border:2px dashed #D5DED6; border-radius:13px; padding:28px 15px; text-align:center; cursor:pointer; background:#FAFCFA")}>
+              <div style={sx("font-size:30px; margin-bottom:6px")}>🖼️</div>
+              <div style={sx("font-size:13.5px; font-weight:600; color:#3C4A40")}>{uploading ? "Đang tải..." : "Bấm để tải ảnh lên"}</div>
+              <div style={sx("font-size:12px; color:#8B9A90; margin-top:3px")}>PNG/JPG, tối đa 5MB</div>
+            </div>
           )}
-          <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Ảnh tự sinh từ sản phẩm của báo giá, gửi kèm khi dùng WhatsApp template.</div>
+          <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Ảnh này gửi kèm làm header khi dùng WhatsApp template (giống bot).</div>
         </div>
       </div>
 
@@ -302,6 +436,8 @@ export default function TemplatesScreen() {
           </div>
         </div>
       )}
+      {formModal}
+      {delModal}
     </div>
   );
 }

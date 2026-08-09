@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/server/db/prisma";
 import { renderTemplate } from "@/server/lib/placeholders";
 import { sendQuotationMessage, uploadWhatsAppMedia } from "@/server/lib/whatsapp";
+import { getTemplateImage } from "@/server/services/templateService";
 import { logActivity } from "@/server/services/activityService";
 
 const MAX_RETRY = 3;
@@ -222,20 +223,20 @@ export async function processNextBatch() {
   const tpl = batch.template;
   const dryRun = process.env.SEND_DRY_RUN !== "false";
 
-  // WhatsApp template mode: gửi bằng template đã duyệt + ảnh header.
+  // Ảnh header = ảnh do người dùng upload vào template (giống bot). Có ảnh thì gửi kèm.
+  const tplImage = await getTemplateImage(tpl.id);
   const useWaTemplate = (channel?.type || "").toUpperCase() === "WHATSAPP" && !!tpl.waTemplateName;
+  const includeImage = !!tplImage;
   let mediaId = batch.mediaId || "";
 
-  // Sinh ảnh báo giá + upload 1 lần/lệnh (chỉ khi gửi thật + có ảnh + có báo giá).
-  if (useWaTemplate && tpl.waImage && !mediaId && !dryRun && tpl.quotation) {
+  // Upload ảnh upload của template lên WhatsApp 1 lần/lệnh (chỉ khi gửi thật + có ảnh).
+  if (useWaTemplate && includeImage && !mediaId && !dryRun && tplImage) {
     try {
       const token = channel?.apiKeyEnv ? process.env[channel.apiKeyEnv] : undefined;
       const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || channel?.accountId || "";
       if (token && phoneNumberId) {
-        const { renderQuotationImage } = await import("@/server/lib/quotationImage");
-        const img = await renderQuotationImage(tpl.quotation, tpl.quotation.items);
-        const png = await img.arrayBuffer();
-        mediaId = await uploadWhatsAppMedia({ token, phoneNumberId, png, filename: `${batch.code}.png` });
+        const bytes = new Uint8Array(tplImage.data).buffer;
+        mediaId = await uploadWhatsAppMedia({ token, phoneNumberId, bytes, mime: tplImage.mime, filename: `${batch.code}` });
         await prisma.sendBatch.update({ where: { id: batch.id }, data: { mediaId } });
       }
     } catch (err) {
@@ -280,7 +281,7 @@ export async function processNextBatch() {
               templateName: tpl.waTemplateName!,
               language: tpl.waLanguage,
               mediaId,
-              includeImage: tpl.waImage,
+              includeImage,
             }
           : null,
       });

@@ -13,3 +13,9 @@ export const createTemplateSchema = z.object({
   waImage: z.boolean().optional(),
 });
 export type CreateTemplateInput = z.infer<typeof createTemplateSchema>;
+
+// Sửa template: mọi field của create là tuỳ chọn, thêm quotationId để gắn/gỡ khỏi báo giá (null = về kho).
+export const updateTemplateSchema = createTemplateSchema.partial().extend({
+  quotationId: numOrStr.nullish(),
+});
+export type UpdateTemplateInput = z.infer<typeof updateTemplateSchema>;

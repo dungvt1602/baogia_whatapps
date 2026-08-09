@@ -9,7 +9,6 @@ export const PATHS: Record<string, string> = {
   products: "/san-pham",
   new: "/bao-gia/tao",
   tpl: "/template",
-  manage: "/quan-ly",
   send: "/gui-bao-gia",
   team: "/nguoi-dung",
   channels: "/kenh-gui",

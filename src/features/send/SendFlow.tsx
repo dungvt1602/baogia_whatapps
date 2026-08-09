@@ -233,8 +233,9 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               Lệnh {preview.batch.code} · {preview.recipients.length} khách · {preview.channel?.name || "kênh mặc định"}
             </div>
 
-            <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Ảnh báo giá (gửi kèm khi dùng WhatsApp template)</div>
-            <img src={`/api/quotations/${preview.batch.quotationId}/image`} alt="Ảnh báo giá" style={sx("width:100%; border:1px solid #E9EEE9; border-radius:12px; display:block")} />
+            <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Ảnh header (gửi kèm khi dùng WhatsApp template)</div>
+            <img src={`/api/templates/${preview.template.id}/image`} alt="Ảnh header" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "block"); }} style={sx("width:100%; border:1px solid #E9EEE9; border-radius:12px; display:block")} />
+            <div style={sx("display:none; font-size:12.5px; color:#8B9A90; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:12px; padding:12px")}>Template chưa có ảnh header — sẽ gửi không kèm ảnh.</div>
 
             <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Nội dung gửi (mẫu cho khách đầu tiên)</div>
             <div style={sx("background:#F6F9F6; border:1px solid #E9EEE9; border-radius:12px; padding:14px; font-size:13.5px; line-height:1.7; color:#3C4A40; white-space:pre-wrap")}>{preview.sample}</div>

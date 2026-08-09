@@ -221,8 +221,22 @@ model Template {
   customers     Customer[]
   // 1-N: template -> lệnh gửi
   sendBatches   SendBatch[]
+  // 1-1: ảnh header do người dùng upload (gửi kèm khi dùng WhatsApp template) — giống bot
+  image         TemplateImage?
 
   @@map("templates")
+}
+
+// Ảnh do người dùng upload cho template (lưu bytes trong DB). Tách bảng để query template thường không tải bytes.
+model TemplateImage {
+  templateId BigInt   @id @map("template_id")
+  data       Bytes // bytes ảnh gốc
+  mime       String   @default("image/png") @db.VarChar(50)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("template_images")
 }
 
 // Template gửi báo giá. 1-N từ quotation và từ template.

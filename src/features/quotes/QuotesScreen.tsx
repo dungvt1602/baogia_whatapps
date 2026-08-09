@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, putJSON } from "@/components/common/api";
+import { getJSON, putJSON, patchJSON } from "@/components/common/api";
 
 type Q = {
   id: string;
@@ -21,6 +21,8 @@ type Tpl = { id: string; name: string; icon: string | null; channel: { type: str
 type QDetail = Q & { validUntil: string | null; issuedDate: string | null; items: Item[]; templates: Tpl[] };
 
 type EditItem = { product: string; packing: string; unit: string; quantity: string; price: string };
+type CatalogProduct = { id: string; name: string; unit: string | null; packing: string | null; price: unknown; currency: string };
+type PoolTpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customers: number } };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
 const inp = "height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
@@ -53,6 +55,10 @@ export default function QuotesScreen() {
   const [quotations, setQuotations] = useState<Q[]>([]);
   const [detail, setDetail] = useState<QDetail | null>(null);
   const [editItems, setEditItems] = useState<EditItem[] | null>(null); // đang sửa sản phẩm
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([]); // kho sản phẩm để chọn nhanh
+  const [picker, setPicker] = useState(false); // đang mở picker chọn template từ kho
+  const [poolTpls, setPoolTpls] = useState<PoolTpl[]>([]); // template trong kho (chưa gắn báo giá)
+  const [detach_, setDetach_] = useState<{ id: string; name: string } | null>(null); // xác nhận gỡ template về kho
   const [err, setErr] = useState("");
 
   const loadList = useCallback(async () => {
@@ -69,6 +75,13 @@ export default function QuotesScreen() {
         ? rows.map((r) => ({ product: r.product, packing: r.packing || "", unit: r.unit || "", quantity: String(num(r.quantity)), price: String(num(r.price)) }))
         : [{ product: "", packing: "", unit: "", quantity: "1", price: "0" }],
     );
+    getJSON<CatalogProduct[]>("/api/products").then(setCatalog).catch(() => {});
+  }
+  // Thêm 1 dòng điền sẵn từ kho sản phẩm
+  function addFromCatalog(id: string) {
+    const p = catalog.find((x) => x.id === id);
+    if (!p || !editItems) return;
+    setEditItems([...editItems, { product: p.name, packing: p.packing || "", unit: p.unit || "", quantity: "1", price: String(num(p.price)) }]);
   }
   async function saveEditor() {
     if (!selQ || !editItems) return;
@@ -79,6 +92,24 @@ export default function QuotesScreen() {
       setEditItems(null);
       await loadDetail(selQ);
     } catch (e) { setErr((e as Error).message); }
+  }
+
+  // ---- Gắn/gỡ template (tạo & sửa nội dung ở menu Template) ----
+  function openPicker() {
+    setPicker(true);
+    getJSON<PoolTpl[]>("/api/templates?pool=1").then(setPoolTpls).catch((e) => setErr((e as Error).message));
+  }
+  async function attachTpl(id: string) {
+    if (!selQ) return;
+    setErr("");
+    try { await patchJSON(`/api/templates/${id}`, { quotationId: selQ }); setPicker(false); await loadDetail(selQ); }
+    catch (e) { setErr((e as Error).message); }
+  }
+  async function doDetach() {
+    if (!detach_) return;
+    setErr("");
+    try { await patchJSON(`/api/templates/${detach_.id}`, { quotationId: null }); setDetach_(null); await loadDetail(selQ); }
+    catch (e) { setErr((e as Error).message); }
   }
 
   useEffect(() => { if (!selQ) loadList(); }, [selQ, loadList]);
@@ -183,20 +214,21 @@ export default function QuotesScreen() {
         <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
           <span style={sx("width:4px; height:16px; border-radius:3px; background:linear-gradient(180deg,#3EA85C,#1F7440)")} />
           <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Template ({detail?.templates.length ?? 0})</div>
+          <HButton s={green} onClick={openPicker}>+ Thêm template</HButton>
         </div>
-        {(!detail || detail.templates.length === 0) && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có template. Thêm ở màn “Quản lý”.</div>}
-        <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:8px")}>
+        {(!detail || detail.templates.length === 0) && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có template. Bấm “+ Thêm template” để chọn từ kho (tạo/sửa template ở menu Template).</div>}
+        <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:8px")}>
           {detail?.templates.map((t) => (
-            <HButton key={t.id} onClick={() => router.push(`/template/${t.id}`)}
-              s="display:flex; align-items:center; gap:10px; width:100%; text-align:left; border:1px solid #E9EEE9; border-radius:11px; padding:10px 12px; background:#fff; cursor:pointer"
-              h="background:#F7FAF7">
-              <span style={sx("font-size:17px")}>{t.icon || "📄"}</span>
-              <div style={sx("min-width:0; flex:1")}>
-                <div style={sx("font-size:13.5px; font-weight:600; color:#14261A")}>{t.name}</div>
-                <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel?.type || "chưa gắn kênh"}</div>
+            <div key={t.id} style={sx("display:flex; align-items:center; gap:10px; border:1px solid #E9EEE9; border-radius:11px; padding:10px 12px; background:#fff")}>
+              <div onClick={() => router.push(`/template/${t.id}`)} style={sx("display:flex; align-items:center; gap:10px; min-width:0; flex:1; cursor:pointer")}>
+                <span style={sx("font-size:17px")}>{t.icon || "📄"}</span>
+                <div style={sx("min-width:0; flex:1")}>
+                  <div style={sx("font-size:13.5px; font-weight:600; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.name}</div>
+                  <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel?.type || "chưa gắn kênh"}</div>
+                </div>
               </div>
-              <span style={sx("color:#B9C5BC; font-size:15px")}>›</span>
-            </HButton>
+              <HButton s="width:32px; height:34px; border:1px solid #E4C7C5; border-radius:9px; background:#fff; color:#B3261E; cursor:pointer; flex-shrink:0" title="Gỡ khỏi báo giá (về kho)" onClick={() => setDetach_({ id: t.id, name: t.name })}>×</HButton>
+            </div>
           ))}
         </div>
       </div>
@@ -210,6 +242,17 @@ export default function QuotesScreen() {
               <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Sản phẩm — {detail?.code}</div>
               <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setEditItems(null)}>✕</HButton>
             </div>
+
+            <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:12px; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:11px; padding:10px 12px")}>
+              <span style={sx("font-size:12.5px; font-weight:600; color:#3C4A40; flex-shrink:0")}>Thêm từ kho:</span>
+              <select value="" onChange={(e) => { addFromCatalog(e.target.value); e.target.value = ""; }} style={sx(`${inp} flex:1`)}>
+                <option value="">— chọn sản phẩm để điền sẵn —</option>
+                {catalog.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} · {money(p.price, p.currency)}{p.unit ? `/${p.unit}` : ""}</option>
+                ))}
+              </select>
+            </div>
+
             <div style={sx("display:flex; flex-direction:column; gap:8px")}>
               {editItems.map((it, i) => (
                 <div key={i} style={sx("display:flex; gap:6px; align-items:center")}>
@@ -227,6 +270,56 @@ export default function QuotesScreen() {
               <div style={sx("flex:1; font-size:14px; color:#3C4A40")}>Tổng: <strong style={sx("color:#14261A")}>{money(editItems.reduce((s, it) => s + num(it.quantity) * num(it.price), 0), detail?.currency || "VND")}</strong></div>
               <HButton s={green} onClick={saveEditor}>Lưu sản phẩm</HButton>
               <HButton s={ghost} onClick={() => setEditItems(null)}>Hủy</HButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Picker chọn template từ kho để gắn vào báo giá */}
+      {picker && (
+        <div style={sx("position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px")}>
+          <div onClick={() => setPicker(false)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
+          <div style={sx("position:relative; width:100%; max-width:520px; max-height:88vh; overflow:auto; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
+            <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:6px")}>
+              <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Thêm template vào {detail?.code}</div>
+              <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setPicker(false)}>✕</HButton>
+            </div>
+            <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Chọn template có sẵn trong kho. Muốn tạo mới hoặc sửa nội dung, vào menu <strong style={sx("color:#3C4A40")}>Template</strong>.</div>
+
+            <div style={sx("display:flex; flex-direction:column; gap:8px")}>
+              {poolTpls.length === 0 && (
+                <div style={sx("font-size:13px; color:#8B9A90; padding:6px 0")}>
+                  Kho không còn template nào. <HButton s={`${ghost} margin-left:6px`} onClick={() => router.push("/template")}>Sang menu Template</HButton>
+                </div>
+              )}
+              {poolTpls.map((t) => (
+                <button key={t.id} onClick={() => attachTpl(t.id)}
+                  style={sx("display:flex; align-items:center; gap:10px; text-align:left; border-width:1px; border-style:solid; border-color:#E9EEE9; border-radius:11px; padding:11px 12px; background:#fff; cursor:pointer; width:100%")}>
+                  <span style={sx("font-size:18px")}>{t.icon || "📄"}</span>
+                  <div style={sx("min-width:0; flex:1")}>
+                    <div style={sx("font-size:13.5px; font-weight:600; color:#14261A")}>{t.name}</div>
+                    <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel?.type || "chưa gắn kênh"}</div>
+                  </div>
+                  <span style={sx("font-size:12.5px; font-weight:600; color:#1F7440; background:#EAF3EC; border-radius:8px; padding:5px 11px; flex-shrink:0")}>+ Gắn</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal xác nhận gỡ template về kho */}
+      {detach_ && (
+        <div style={sx("position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px")}>
+          <div onClick={() => setDetach_(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
+          <div style={sx("position:relative; width:100%; max-width:420px; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
+            <div style={sx("font-size:17px; font-weight:700; color:#14261A; margin-bottom:8px")}>Gỡ template khỏi báo giá?</div>
+            <div style={sx("font-size:13.5px; line-height:1.55; color:#4A5A4E; margin-bottom:18px")}>
+              Gỡ <strong style={sx("color:#14261A")}>“{detach_.name}”</strong> khỏi báo giá này. Template <strong>không bị xóa</strong> — nó trở về kho và có thể gắn lại sau (xóa hẳn ở menu Template).
+            </div>
+            <div style={sx("display:flex; gap:10px")}>
+              <HButton s="flex:1; height:44px; border:none; border-radius:11px; background:#B3261E; color:#fff; font-size:14px; font-weight:600; cursor:pointer" onClick={doDetach}>Gỡ về kho</HButton>
+              <HButton s={`${ghost} height:44px`} onClick={() => setDetach_(null)}>Hủy</HButton>
             </div>
           </div>
         </div>
