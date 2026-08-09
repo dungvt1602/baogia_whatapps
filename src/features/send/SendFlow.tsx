@@ -44,7 +44,7 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-const STEPS = ["Chọn báo giá", "Chọn template", "Điền ảnh", "Danh sách & gửi"];
+const STEPS = ["Chọn báo giá", "Chọn template", "Danh sách gửi", "Điền ảnh & gửi"];
 function Stepper({ step }: { step: number }) {
   return (
     <div style={sx("display:flex; align-items:center; gap:6px; margin-bottom:16px; flex-wrap:wrap")}>
@@ -97,16 +97,22 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
 
   // Bước 1 -> 2
   const pickQuotation = useCallback(async (q: Quotation) => {
-    setSelQ(q); setSelTpl(null); setTemplates([]); setErr(""); setLoadingT(true); setStep(2);
+    setSelQ(q); setSelTpl(null); setTemplates([]); setPreview(null); setErr(""); setLoadingT(true); setStep(2);
     try { setTemplates(await getJSON<Template[]>(`/api/quotations/${q.id}/templates`)); }
     catch (e) { setErr((e as Error).message); }
     finally { setLoadingT(false); }
   }, []);
 
-  // Bước 2 -> 3
-  const pickTemplate = useCallback((t: Template) => {
-    setSelTpl(t); setErr(""); setHasImage(null); setImgKey((k) => k + 1); setStep(3);
-  }, []);
+  // Bước 2 -> 3: chọn template + tạo preview (lọc khách, dựng bảng, danh sách gửi)
+  const pickTemplate = useCallback(async (t: Template) => {
+    setSelTpl(t); setErr(""); setBusy(true);
+    try { setPreview(await postJSON<Preview>("/api/send/preview", { templateId: t.id, actor: { name: actorName } })); setStep(3); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  }, [actorName]);
+
+  // Bước 3 -> 4: sang bước điền ảnh
+  function goImage() { setHasImage(null); setImgKey((k) => k + 1); setStep(4); }
 
   async function uploadImage(file: File | undefined) {
     if (!file || !selTpl) return;
@@ -120,15 +126,6 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     } catch (e) { setErr((e as Error).message); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   }
-
-  // Bước 3 -> 4: tạo preview (lọc khách, dựng bảng)
-  const goPreview = useCallback(async () => {
-    if (!selTpl) return;
-    setBusy(true); setErr("");
-    try { setPreview(await postJSON<Preview>("/api/send/preview", { templateId: selTpl.id, actor: { name: actorName } })); setStep(4); }
-    catch (e) { setErr((e as Error).message); }
-    finally { setBusy(false); }
-  }, [selTpl, actorName]);
 
   const doConfirm = useCallback(async () => {
     if (!preview) return;
@@ -234,10 +231,11 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             <HButton s={ghost} onClick={() => setStep(1)}>‹ Đổi báo giá</HButton>
           </div>
           {loadingT && <div style={sx("font-size:13px; color:#8B9A90")}>Đang tải template...</div>}
+          {busy && <div style={sx("font-size:13px; color:#2F6FD6")}>Đang lấy danh sách gửi...</div>}
           {!loadingT && templates.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Báo giá này chưa có template. Vào menu Báo giá để gắn template.</div>}
           <div style={sx("display:flex; flex-direction:column; gap:8px")}>
             {templates.map((t) => (
-              <div key={t.id} onClick={() => pickTemplate(t)} style={sx("display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px; cursor:pointer")}>
+              <div key={t.id} onClick={() => !busy && pickTemplate(t)} style={sx("display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px; cursor:pointer")}>
                 <div style={sx("width:38px; height:38px; border-radius:11px; background:#F1F5F1; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0")}>{t.icon || "📄"}</div>
                 <div style={sx("min-width:0; flex:1")}>
                   <div style={sx("font-size:14px; font-weight:600; color:#14261A")}>{t.name}</div>
@@ -250,42 +248,12 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
         </div>
       )}
 
-      {/* Bước 3: điền ảnh */}
-      {step === 3 && selTpl && (
-        <div style={sx(card)}>
-          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:6px")}>
-            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Ảnh gửi kèm — {selTpl.name}</div>
-            <HButton s={ghost} onClick={() => setStep(2)}>‹ Đổi template</HButton>
-          </div>
-          <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Ảnh này gửi vào <b>header</b> của template WhatsApp (giống bot). Có thể tải mới hoặc thay ảnh.</div>
-          <input ref={fileRef} type="file" accept="image/*" style={sx("display:none")} onChange={(e) => uploadImage(e.target.files?.[0])} />
-          {hasImage !== false ? (
-            <>
-              <img src={`/api/templates/${selTpl.id}/image?t=${imgKey}`} alt="Ảnh header" onLoad={() => setHasImage(true)} onError={() => setHasImage(false)}
-                style={sx(`width:100%; max-height:340px; object-fit:contain; border:1px solid #E9EEE9; border-radius:12px; display:${hasImage ? "block" : "none"}; background:#FAFCFA`)} />
-              {hasImage === null && <div style={sx("font-size:13px; color:#8B9A90; padding:20px; text-align:center")}>Đang kiểm tra ảnh...</div>}
-              {hasImage && <HButton s={`${ghost} margin-top:12px; width:100%`} onClick={() => fileRef.current?.click()}>{uploading ? "Đang tải..." : "Thay ảnh khác"}</HButton>}
-            </>
-          ) : (
-            <div onClick={() => fileRef.current?.click()} style={sx("border:2px dashed #D5DED6; border-radius:13px; padding:34px 15px; text-align:center; cursor:pointer; background:#FAFCFA")}>
-              <div style={sx("font-size:34px; margin-bottom:6px")}>🖼️</div>
-              <div style={sx("font-size:14px; font-weight:600; color:#3C4A40")}>{uploading ? "Đang tải..." : "Bấm để tải ảnh báo giá lên"}</div>
-              <div style={sx("font-size:12px; color:#8B9A90; margin-top:3px")}>PNG/JPG, tối đa 5MB</div>
-            </div>
-          )}
-          <div style={sx("display:flex; gap:10px; margin-top:18px")}>
-            <HButton s={`${green} flex:1; opacity:${busy ? ".6" : "1"}`} onClick={goPreview}>{busy ? "Đang xử lý..." : "Tiếp tục →"}</HButton>
-            {hasImage === false && <HButton s={ghost} onClick={goPreview}>Bỏ qua ảnh</HButton>}
-          </div>
-        </div>
-      )}
-
-      {/* Bước 4: danh sách & gửi */}
-      {step === 4 && preview && (
+      {/* Bước 3: danh sách gửi (xem trước) */}
+      {step === 3 && preview && (
         <div style={sx(card)}>
           <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
-            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Kiểm tra & gửi</div>
-            <HButton s={ghost} onClick={() => setStep(3)}>‹ Đổi ảnh</HButton>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Danh sách gửi</div>
+            <HButton s={ghost} onClick={() => { setPreview(null); setStep(2); }}>‹ Đổi template</HButton>
           </div>
 
           {/* Đầu mục */}
@@ -335,7 +303,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
           </div>
 
           {/* Danh sách khách nhận */}
-          <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Danh sách gửi ({preview.recipients.length})</div>
+          <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Khách nhận ({preview.recipients.length})</div>
           <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto")}>
             {preview.recipients.map((r) => (
               <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
@@ -347,8 +315,37 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
           </div>
 
           <div style={sx("display:flex; gap:10px; margin-top:20px")}>
-            <HButton s={`${green} flex:1; height:46px; opacity:${busy ? ".6" : "1"}`} onClick={doConfirm}>{busy ? "Đang gửi..." : `Gửi cho ${preview.recipients.length} khách`}</HButton>
-            <HButton s={ghost} onClick={() => { setPreview(null); setStep(3); }}>Hủy</HButton>
+            <HButton s={`${green} flex:1`} onClick={goImage}>Tiếp tục → điền ảnh</HButton>
+          </div>
+        </div>
+      )}
+
+      {/* Bước 4: điền ảnh & gửi */}
+      {step === 4 && selTpl && preview && (
+        <div style={sx(card)}>
+          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:6px")}>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Ảnh gửi kèm — {selTpl.name}</div>
+            <HButton s={ghost} onClick={() => setStep(3)}>‹ Xem lại danh sách</HButton>
+          </div>
+          <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Ảnh này gửi vào <b>header</b> của template WhatsApp (giống bot). Có thể bỏ qua nếu template gửi text.</div>
+          <input ref={fileRef} type="file" accept="image/*" style={sx("display:none")} onChange={(e) => uploadImage(e.target.files?.[0])} />
+          {hasImage !== false ? (
+            <>
+              <img src={`/api/templates/${selTpl.id}/image?t=${imgKey}`} alt="Ảnh header" onLoad={() => setHasImage(true)} onError={() => setHasImage(false)}
+                style={sx(`width:100%; max-height:320px; object-fit:contain; border:1px solid #E9EEE9; border-radius:12px; display:${hasImage ? "block" : "none"}; background:#FAFCFA`)} />
+              {hasImage === null && <div style={sx("font-size:13px; color:#8B9A90; padding:20px; text-align:center")}>Đang kiểm tra ảnh...</div>}
+              {hasImage && <HButton s={`${ghost} margin-top:12px; width:100%`} onClick={() => fileRef.current?.click()}>{uploading ? "Đang tải..." : "Thay ảnh khác"}</HButton>}
+            </>
+          ) : (
+            <div onClick={() => fileRef.current?.click()} style={sx("border:2px dashed #D5DED6; border-radius:13px; padding:30px 15px; text-align:center; cursor:pointer; background:#FAFCFA")}>
+              <div style={sx("font-size:32px; margin-bottom:6px")}>🖼️</div>
+              <div style={sx("font-size:14px; font-weight:600; color:#3C4A40")}>{uploading ? "Đang tải..." : "Bấm để tải ảnh báo giá lên"}</div>
+              <div style={sx("font-size:12px; color:#8B9A90; margin-top:3px")}>PNG/JPG, tối đa 5MB</div>
+            </div>
+          )}
+
+          <div style={sx("display:flex; gap:10px; margin-top:20px")}>
+            <HButton s={`${green} flex:1; height:48px; opacity:${busy || uploading ? ".6" : "1"}`} onClick={doConfirm}>{busy ? "Đang gửi..." : `Gửi cho ${preview.recipients.length} khách`}</HButton>
           </div>
         </div>
       )}
