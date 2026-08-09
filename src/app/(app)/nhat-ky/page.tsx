@@ -1,7 +1,5 @@
-"use client";
-import { useAgoCtx } from "@/components/layout/AgoContext";
-import { Logs } from "@/features/mock/Screens2";
+import LogsScreen from "@/features/logs/LogsScreen";
 
 export default function Page() {
-  return <Logs v={useAgoCtx()} />;
+  return <LogsScreen />;
 }

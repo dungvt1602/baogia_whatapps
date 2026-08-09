@@ -1,7 +1,5 @@
-"use client";
-import { useAgoCtx } from "@/components/layout/AgoContext";
-import { Team } from "@/features/mock/Screens2";
+import UsersScreen from "@/features/users/UsersScreen";
 
 export default function Page() {
-  return <Team v={useAgoCtx()} />;
+  return <UsersScreen />;
 }

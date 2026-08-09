@@ -1,7 +1,5 @@
-"use client";
-import { useAgoCtx } from "@/components/layout/AgoContext";
-import { Channels } from "@/features/mock/Screens2";
+import ChannelsScreen from "@/features/channels/ChannelsScreen";
 
 export default function Page() {
-  return <Channels v={useAgoCtx()} />;
+  return <ChannelsScreen />;
 }

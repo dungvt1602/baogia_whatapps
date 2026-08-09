@@ -88,6 +88,8 @@ export default function TemplatesScreen() {
   const [channels, setChannels] = useState<Ch[]>([]);
   const [form, setForm] = useState<TplForm | null>(null); // tạo/sửa template
   const [delT, setDelT] = useState<{ id: string; name: string } | null>(null); // xác nhận xóa template
+  const [search, setSearch] = useState(""); // tìm kiếm danh sách
+  const [lpage, setLpage] = useState(1); // trang danh sách
   const [err, setErr] = useState("");
 
   const loadTemplates = useCallback(async () => {
@@ -253,16 +255,25 @@ export default function TemplatesScreen() {
 
   // ---------- DANH SÁCH TEMPLATE ----------
   if (!selT) {
+    const kw = search.trim().toLowerCase();
+    const filtered = templates.filter((t) => !kw || t.name.toLowerCase().includes(kw) || (t.quotation?.code || "").toLowerCase().includes(kw));
+    const lTotal = Math.max(1, Math.ceil(filtered.length / 12));
+    const lCur = Math.min(lpage, lTotal);
+    const lPaged = filtered.slice((lCur - 1) * 12, lCur * 12);
     return (
       <div>
         {errBox}
-        <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:14px")}>
-          <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Tất cả template ({templates.length})</div>
+        <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap")}>
+          <div style={sx("position:relative; width:260px")}>
+            <span style={sx("position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; color:#9AA7A0")}>🔍</span>
+            <HInput s="height:36px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px 0 32px; font-size:13.5px; color:#14261A; outline:none; width:100%;" focus={focus} value={search} onChange={(e) => { setSearch(e.target.value); setLpage(1); }} placeholder="Tìm tên template hoặc mã báo giá..." />
+          </div>
+          <div style={sx("font-size:13px; color:#7B8A80; flex:1")}>{filtered.length} template</div>
           <HButton s={green} onClick={openCreate}>+ Tạo template</HButton>
         </div>
-        {templates.length === 0 && <div style={sx(card + "; font-size:13px; color:#8B9A90")}>Chưa có template. Bấm “+ Tạo template” để tạo mới.</div>}
+        {filtered.length === 0 && <div style={sx(card + "; font-size:13px; color:#8B9A90")}>{templates.length === 0 ? "Chưa có template. Bấm “+ Tạo template” để tạo mới." : "Không tìm thấy template khớp."}</div>}
         <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px")}>
-          {templates.map((t) => (
+          {lPaged.map((t) => (
             <HButton key={t.id} onClick={() => openDetail(t.id)}
               s="display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:#fff; border-width:1px; border-style:solid; border-color:#E9EEE9; border-radius:16px; padding:16px; cursor:pointer; transition:border-color .15s, box-shadow .15s"
               h="border-color:#3EA85C; box-shadow:0 12px 26px -16px rgba(31,116,64,.35)">
@@ -275,6 +286,13 @@ export default function TemplatesScreen() {
             </HButton>
           ))}
         </div>
+        {lTotal > 1 && (
+          <div style={sx("display:flex; align-items:center; gap:8px; margin-top:14px")}>
+            <div style={sx("font-size:12.5px; color:#7B8A80; flex:1")}>Trang {lCur}/{lTotal}</div>
+            <HButton s={`${ghost} ${lCur <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setLpage(lCur - 1)}>‹ Trước</HButton>
+            <HButton s={`${ghost} ${lCur >= lTotal ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setLpage(lCur + 1)}>Sau ›</HButton>
+          </div>
+        )}
         {formModal}
       </div>
     );

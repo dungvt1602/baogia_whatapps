@@ -1,7 +1,5 @@
-"use client";
-import { useAgoCtx } from "@/components/layout/AgoContext";
-import { Customers } from "@/features/mock/Screens2";
+import CustomersScreen from "@/features/customers/CustomersScreen";
 
 export default function Page() {
-  return <Customers v={useAgoCtx()} />;
+  return <CustomersScreen />;
 }

@@ -106,16 +106,30 @@ async function main() {
     ],
   });
 
-  // 9) Kho sản phẩm dùng chung (menu Sản phẩm)
+  // 9) Kho sản phẩm dùng chung (menu Sản phẩm) — cấu trúc theo sheet bot.
+  // GIA_FINAL = giaMua × (1 + haoHut/100) + vanChuyen; giaMua=null nghĩa là hết hàng.
+  const rawProducts: { code: string; name: string; unit: string; giaMua: number | null; haoHut: number; vanChuyen: number; note: string }[] = [
+    { code: "BO034", name: "BƠ 034", unit: "KG", giaMua: 36000, haoHut: 5, vanChuyen: 2000, note: "Giá mua trái" },
+    { code: "BOBOOTH", name: "BƠ BOOTH", unit: "KG", giaMua: 22000, haoHut: 5, vanChuyen: 2000, note: "Giá mua trái" },
+    { code: "BUOI", name: "BƯỞI DA XANH", unit: "KG", giaMua: 32000, haoHut: 10, vanChuyen: 1500, note: "Giá mua trái" },
+    { code: "CHANHKHONGHAT", name: "CHANH KHÔNG HẠT", unit: "KG", giaMua: 9000, haoHut: 0, vanChuyen: 0, note: "Giá gia công" },
+    { code: "CHOMCHOM", name: "CHÔM CHÔM", unit: "KG", giaMua: 20000, haoHut: 30, vanChuyen: 2000, note: "Giá mua trái" },
+    { code: "HANHTIMANDO", name: "HÀNH TÍM ẤN ĐỘ", unit: "KG", giaMua: 7200, haoHut: 2, vanChuyen: 0, note: "Giá nhập khẩu" },
+    { code: "CULUN", name: "CỦ LÙN", unit: "KG", giaMua: null, haoHut: 10, vanChuyen: 2000, note: "Giá mua trái" },
+  ];
   await prisma.product.deleteMany({});
   await prisma.product.createMany({
-    data: [
-      { name: "Thanh long ruột đỏ", unit: "kg", packing: "Thùng carton 5kg", price: "3200", market: "INDIA" },
-      { name: "Thanh long ruột trắng", unit: "kg", packing: "Thùng carton 5kg", price: "2600", market: "INDIA" },
-      { name: "Chanh dây", unit: "kg", packing: "Thùng 10kg", price: "1800", market: "INDIA" },
-      { name: "Xoài cát Hoà Lộc", unit: "kg", packing: "Thùng 5kg", price: "4200", market: "UAE" },
-      { name: "Dừa tươi gọt vỏ", unit: "trái", packing: "Lưới 9 trái", price: "12000", market: "USA" },
-    ],
+    data: rawProducts.map((p) => ({
+      code: p.code,
+      name: p.name,
+      unit: p.unit,
+      giaMua: p.giaMua != null ? p.giaMua.toString() : null,
+      haoHut: p.haoHut.toString(),
+      vanChuyen: p.vanChuyen.toString(),
+      giaFinal: p.giaMua != null ? (p.giaMua * (1 + p.haoHut / 100) + p.vanChuyen).toFixed(2) : null,
+      status: "ACTIVE",
+      note: p.note,
+    })),
   });
 
   const custCount = await prisma.customer.count({ where: { templateId: template.id } });

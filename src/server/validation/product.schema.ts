@@ -3,14 +3,15 @@ import { z } from "zod";
 const numOrStr = z.union([z.number(), z.string()]);
 
 export const createProductSchema = z.object({
-  name: z.string().min(1, "Thiếu tên sản phẩm"),
+  code: z.string().min(1, "Thiếu mã sản phẩm (MA_SP)"),
+  name: z.string().min(1, "Thiếu tên sản phẩm (TEN_SP)"),
   unit: z.string().nullish(),
-  packing: z.string().nullish(),
-  price: numOrStr.optional(),
+  giaMua: numOrStr.nullish(), // null/"" = hết hàng
+  haoHut: numOrStr.optional(), // %
+  vanChuyen: numOrStr.optional(),
   currency: z.string().optional(),
-  market: z.string().nullish(),
+  status: z.string().optional(),
   note: z.string().nullish(),
-  isActive: z.boolean().optional(),
 });
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 

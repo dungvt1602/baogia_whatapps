@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, putJSON, patchJSON } from "@/components/common/api";
+import { getJSON, putJSON, patchJSON, sendJSON } from "@/components/common/api";
 
 type Q = {
   id: string;
@@ -21,7 +21,7 @@ type Tpl = { id: string; name: string; icon: string | null; channel: { type: str
 type QDetail = Q & { validUntil: string | null; issuedDate: string | null; items: Item[]; templates: Tpl[] };
 
 type EditItem = { product: string; packing: string; unit: string; quantity: string; price: string };
-type CatalogProduct = { id: string; name: string; unit: string | null; packing: string | null; price: unknown; currency: string };
+type CatalogProduct = { id: string; code: string; name: string; unit: string | null; giaFinal: unknown; currency: string };
 type PoolTpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customers: number } };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
@@ -59,6 +59,9 @@ export default function QuotesScreen() {
   const [picker, setPicker] = useState(false); // đang mở picker chọn template từ kho
   const [poolTpls, setPoolTpls] = useState<PoolTpl[]>([]); // template trong kho (chưa gắn báo giá)
   const [detach_, setDetach_] = useState<{ id: string; name: string } | null>(null); // xác nhận gỡ template về kho
+  const [qsearch, setQsearch] = useState(""); // tìm kiếm danh sách báo giá
+  const [qpage, setQpage] = useState(1); // trang danh sách
+  const [delQ, setDelQ] = useState<{ id: string; code: string } | null>(null); // xác nhận xóa báo giá
   const [err, setErr] = useState("");
 
   const loadList = useCallback(async () => {
@@ -81,7 +84,7 @@ export default function QuotesScreen() {
   function addFromCatalog(id: string) {
     const p = catalog.find((x) => x.id === id);
     if (!p || !editItems) return;
-    setEditItems([...editItems, { product: p.name, packing: p.packing || "", unit: p.unit || "", quantity: "1", price: String(num(p.price)) }]);
+    setEditItems([...editItems, { product: p.name, packing: "", unit: p.unit || "", quantity: "1", price: String(num(p.giaFinal)) }]);
   }
   async function saveEditor() {
     if (!selQ || !editItems) return;
@@ -111,6 +114,12 @@ export default function QuotesScreen() {
     try { await patchJSON(`/api/templates/${detach_.id}`, { quotationId: null }); setDetach_(null); await loadDetail(selQ); }
     catch (e) { setErr((e as Error).message); }
   }
+  async function doDelQ() {
+    if (!delQ) return;
+    setErr("");
+    try { await sendJSON("DELETE", `/api/quotations/${delQ.id}`); setDelQ(null); await loadList(); }
+    catch (e) { setErr((e as Error).message); }
+  }
 
   useEffect(() => { if (!selQ) loadList(); }, [selQ, loadList]);
   useEffect(() => {
@@ -123,28 +132,64 @@ export default function QuotesScreen() {
   // ---------- DANH SÁCH BÁO GIÁ ----------
   if (!selQ) {
     return (
-      <div>
-        {errBox}
-        {quotations.length === 0 && <div style={sx(card + "; font-size:13px; color:#8B9A90")}>Chưa có báo giá. Bấm “+ Báo giá mới” hoặc tạo ở màn “Quản lý”.</div>}
-        <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:14px")}>
-          {quotations.map((q) => (
-            <HButton key={q.id} onClick={() => router.push(`/bao-gia/${q.id}`)}
-              s="display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:#fff; border-width:1px; border-style:solid; border-color:#E9EEE9; border-radius:16px; padding:16px; cursor:pointer; transition:border-color .15s, box-shadow .15s"
-              h="border-color:#3EA85C; box-shadow:0 12px 26px -16px rgba(31,116,64,.35)">
-              <div style={sx("width:44px; height:44px; border-radius:12px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>📄</div>
-              <div style={sx("min-width:0; flex:1")}>
-                <div style={sx("font-size:15px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.code}</div>
-                <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.title || "—"} · {q._count.templates} template</div>
+      (() => {
+        const kw = qsearch.trim().toLowerCase();
+        const filtered = quotations.filter((q) => !kw || q.code.toLowerCase().includes(kw) || (q.title || "").toLowerCase().includes(kw) || (q.market || "").toLowerCase().includes(kw));
+        const total = Math.max(1, Math.ceil(filtered.length / 12));
+        const cur = Math.min(qpage, total);
+        const pageRows = filtered.slice((cur - 1) * 12, cur * 12);
+        return (
+          <div>
+            {errBox}
+            <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap")}>
+              <div style={sx("position:relative; width:280px")}>
+                <span style={sx("position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; color:#9AA7A0")}>🔍</span>
+                <HInput s="height:36px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px 0 32px; font-size:13.5px; color:#14261A; outline:none; width:100%;" focus={focus} value={qsearch} onChange={(e) => { setQsearch(e.target.value); setQpage(1); }} placeholder="Tìm mã, tiêu đề, thị trường..." />
               </div>
-              <div style={sx("text-align:right; flex-shrink:0")}>
-                <div style={sx("font-size:13.5px; font-weight:700; color:#14261A")}>{money(q.totalAmount, q.currency)}</div>
-                <div style={sx("font-size:11.5px; color:#7B8A80")}>{q.market || q.status}</div>
+              <div style={sx("font-size:13px; color:#7B8A80")}>{filtered.length} báo giá</div>
+            </div>
+            {filtered.length === 0 && <div style={sx(card + "; font-size:13px; color:#8B9A90")}>{quotations.length === 0 ? "Chưa có báo giá. Bấm “+ Báo giá mới”." : "Không tìm thấy báo giá khớp."}</div>}
+            <div style={sx("display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:14px")}>
+              {pageRows.map((q) => (
+                <div key={q.id} style={sx("display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:16px")}>
+                  <div onClick={() => router.push(`/bao-gia/${q.id}`)} style={sx("display:flex; align-items:center; gap:12px; min-width:0; flex:1; cursor:pointer")}>
+                    <div style={sx("width:44px; height:44px; border-radius:12px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>📄</div>
+                    <div style={sx("min-width:0; flex:1")}>
+                      <div style={sx("font-size:15px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.code}</div>
+                      <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.title || "—"} · {q._count.templates} template</div>
+                    </div>
+                    <div style={sx("text-align:right; flex-shrink:0")}>
+                      <div style={sx("font-size:13.5px; font-weight:700; color:#14261A")}>{money(q.totalAmount, q.currency)}</div>
+                      <div style={sx("font-size:11.5px; color:#7B8A80")}>{q.market || q.status}</div>
+                    </div>
+                  </div>
+                  <HButton s="width:32px; height:34px; border:1px solid #E4C7C5; border-radius:9px; background:#fff; color:#B3261E; cursor:pointer; flex-shrink:0" title="Xóa báo giá" onClick={() => setDelQ({ id: q.id, code: q.code })}>🗑</HButton>
+                </div>
+              ))}
+            </div>
+            {total > 1 && (
+              <div style={sx("display:flex; align-items:center; gap:8px; margin-top:14px")}>
+                <div style={sx("font-size:12.5px; color:#7B8A80; flex:1")}>Trang {cur}/{total}</div>
+                <HButton s={`${ghost} ${cur <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setQpage(cur - 1)}>‹ Trước</HButton>
+                <HButton s={`${ghost} ${cur >= total ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setQpage(cur + 1)}>Sau ›</HButton>
               </div>
-              <span style={sx("color:#B9C5BC; font-size:18px; flex-shrink:0")}>›</span>
-            </HButton>
-          ))}
-        </div>
-      </div>
+            )}
+            {delQ && (
+              <div style={sx("position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px")}>
+                <div onClick={() => setDelQ(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
+                <div style={sx("position:relative; width:100%; max-width:430px; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
+                  <div style={sx("font-size:17px; font-weight:700; color:#14261A; margin-bottom:8px")}>Xóa báo giá?</div>
+                  <div style={sx("font-size:13.5px; line-height:1.55; color:#4A5A4E; margin-bottom:18px")}>Xóa hẳn <strong style={sx("color:#14261A")}>“{delQ.code}”</strong> cùng sản phẩm & lệnh gửi của nó. Template của báo giá sẽ được đưa về kho. Không thể hoàn tác.</div>
+                  <div style={sx("display:flex; gap:10px")}>
+                    <HButton s="flex:1; height:44px; border:none; border-radius:11px; background:#B3261E; color:#fff; font-size:14px; font-weight:600; cursor:pointer" onClick={doDelQ}>Xóa báo giá</HButton>
+                    <HButton s={`${ghost} height:44px`} onClick={() => setDelQ(null)}>Hủy</HButton>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()
     );
   }
 
@@ -247,8 +292,8 @@ export default function QuotesScreen() {
               <span style={sx("font-size:12.5px; font-weight:600; color:#3C4A40; flex-shrink:0")}>Thêm từ kho:</span>
               <select value="" onChange={(e) => { addFromCatalog(e.target.value); e.target.value = ""; }} style={sx(`${inp} flex:1`)}>
                 <option value="">— chọn sản phẩm để điền sẵn —</option>
-                {catalog.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} · {money(p.price, p.currency)}{p.unit ? `/${p.unit}` : ""}</option>
+                {catalog.filter((p) => p.giaFinal != null && p.giaFinal !== "").map((p) => (
+                  <option key={p.id} value={p.id}>{p.code} · {p.name} · {money(p.giaFinal, p.currency)}{p.unit ? `/${p.unit}` : ""}</option>
                 ))}
               </select>
             </div>

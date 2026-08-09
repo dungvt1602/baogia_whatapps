@@ -48,6 +48,23 @@ export function getQuotationDetail(id: string) {
   });
 }
 
+// Xóa báo giá: dọn lệnh gửi/jobs, gỡ template về kho, xóa items + gán user, rồi xóa báo giá.
+export async function deleteQuotation(id: string) {
+  const qid = BigInt(id);
+  const batches = await prisma.sendBatch.findMany({ where: { quotationId: qid }, select: { id: true } });
+  const batchIds = batches.map((b) => b.id);
+  await prisma.$transaction([
+    ...(batchIds.length ? [prisma.sendJob.deleteMany({ where: { batchId: { in: batchIds } } })] : []),
+    prisma.sendBatch.deleteMany({ where: { quotationId: qid } }),
+    prisma.quotationTemplateSend.deleteMany({ where: { quotationId: qid } }),
+    prisma.template.updateMany({ where: { quotationId: qid }, data: { quotationId: null } }),
+    prisma.quotationItem.deleteMany({ where: { quotationId: qid } }),
+    prisma.userQuotation.deleteMany({ where: { quotationId: qid } }),
+    prisma.quotation.delete({ where: { id: qid } }),
+  ]);
+  return { ok: true };
+}
+
 export function listItems(quotationId: string) {
   return prisma.quotationItem.findMany({
     where: { quotationId: BigInt(quotationId) },

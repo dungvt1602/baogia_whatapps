@@ -128,7 +128,7 @@ export function useAgo() {
     quotes: ["Báo giá", "Chọn một báo giá để bắt đầu"],
     template: ["Thông tin báo giá", "Người tạo, lịch sử template và chọn mẫu gửi"],
     detail: ["Chi tiết báo giá", "Xem, chỉnh sửa và gửi cho khách hàng"],
-    customers: ["Khách hàng", "42 khách hàng trên 18 thị trường"],
+    customers: ["Khách hàng", "Danh sách khách hàng nhận báo giá"],
     team: ["Quản trị người dùng", "Duyệt tài khoản mới và phân quyền"],
     channels: ["Kênh gửi báo giá", "Kết nối WhatsApp, Zalo và Telegram"],
     logs: ["Nhật ký hoạt động", "Toàn bộ thao tác trên hệ thống"],
@@ -194,7 +194,7 @@ export function useAgo() {
     detailCols: narrow ? "1fr" : "minmax(0,1.5fr) minmax(0,1fr)",
     colDisplay: st.w < 760 ? "none" : "block",
     newBtnStyle:
-      tiny || ["channels", "logs", "send", "products"].includes(page) || (page === "tpl" && !st.tplQuoteId)
+      tiny || ["channels", "logs", "send", "products", "customers", "team"].includes(page) || (page === "tpl" && !st.tplQuoteId)
         ? "display:none"
         : "height:40px; padding:0 16px; border:none; border-radius:11px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:13.5px; font-weight:600; cursor:pointer; white-space:nowrap; box-shadow:0 8px 18px -9px rgba(31,116,64,.8)",
     newBtnLabel: page === "team" ? "+ Thêm người dùng" : page === "customers" ? "+ Thêm khách hàng" : page === "tpl" ? "+ Template mới" : "+ Báo giá mới",

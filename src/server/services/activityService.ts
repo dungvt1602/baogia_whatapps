@@ -1,6 +1,11 @@
 import "server-only";
 import { prisma } from "@/server/db/prisma";
 
+// Danh sách nhật ký (mới nhất trước) — cho màn Nhật ký (chỉ đọc).
+export function listActivity(limit = 300) {
+  return prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: limit });
+}
+
 // Ghi nhật ký hoạt động (≈ LOG_HOAT_DONG của bot). Không làm hỏng luồng chính nếu lỗi.
 export async function logActivity(input: {
   userId?: bigint | number | string | null;
