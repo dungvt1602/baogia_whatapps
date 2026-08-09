@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { sx, HButton } from "@/components/common/ui";
 
 // ---- kiểu dữ liệu trả về từ API (BigInt -> string) ----
-type Quotation = { id: string; code: string; title: string | null; status: string; market: string | null; _count: { templates: number } };
-type Template = { id: string; name: string; icon: string | null; body: string | null; channel: { id: string; name: string; type: string } | null; _count: { customers: number } };
+type Quotation = { id: string; code: string; title: string | null; status: string; market: string | null; totalAmount: unknown; currency: string; _count: { templates: number } };
+type Template = { id: string; name: string; icon: string | null; body: string | null; waTemplateName: string | null; channel: { id: string; name: string; type: string } | null; _count: { customers: number } };
 type Recipient = { id: string; name: string; phone: string };
 type PItem = { no: number; product: string; packing: string | null; unit: string | null; quantity: unknown; price: unknown };
 type Preview = {
@@ -22,15 +22,11 @@ type Job = { id: string; toName: string | null; toPhone: string | null; channel:
 type Batch = { id: string; code: string; status: string; note: string | null; recipientCount: number; quotation: { code: string; title: string | null }; template: { name: string }; channel: { name: string; type: string } | null; jobs: Job[] };
 
 const TERMINAL = ["SENT", "PARTIAL_FAILED", "CANCELLED"];
-
-const jobColor: Record<string, string> = {
-  QUEUED: "#B07208",
-  SENDING: "#2F6FD6",
-  SENT: "#1F7440",
-  FAILED: "#B3261E",
-};
+const jobColor: Record<string, string> = { QUEUED: "#B07208", SENDING: "#2F6FD6", SENT: "#1F7440", FAILED: "#B3261E" };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
+const green = "border:none; border-radius:11px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:14px; font-weight:600; cursor:pointer; padding:0 18px; height:44px";
+const ghost = "border:1px solid #DCE3DC; border-radius:11px; background:#fff; color:#4A5A4E; font-size:14px; font-weight:600; cursor:pointer; padding:0 16px; height:44px";
 const num = (v: unknown) => { const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0; };
 const money = (v: unknown, cur = "VND") => `${num(v).toLocaleString("vi-VN")} ${cur}`;
 const fmtDate = (s: string | null) => (s ? new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(s)) : "—");
@@ -48,14 +44,44 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+const STEPS = ["Chọn báo giá", "Chọn template", "Điền ảnh", "Danh sách & gửi"];
+function Stepper({ step }: { step: number }) {
+  return (
+    <div style={sx("display:flex; align-items:center; gap:6px; margin-bottom:16px; flex-wrap:wrap")}>
+      {STEPS.map((label, i) => {
+        const n = i + 1;
+        const done = n < step, active = n === step;
+        const bg = done ? "#1F7440" : active ? "#EAF3EC" : "#F1F4F1";
+        const fg = done ? "#fff" : active ? "#1F7440" : "#9AA7A0";
+        return (
+          <div key={label} style={sx("display:flex; align-items:center; gap:6px")}>
+            <div style={sx(`display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:20px; background:${active ? "#EAF3EC" : "transparent"}`)}>
+              <span style={sx(`width:24px; height:24px; border-radius:50%; background:${bg}; color:${fg}; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:700`)}>{done ? "✓" : n}</span>
+              <span style={sx(`font-size:13px; font-weight:600; color:${active ? "#14261A" : "#8B9A90"}`)}>{label}</span>
+            </div>
+            {n < STEPS.length && <span style={sx("color:#CBD6CD; font-size:14px")}>›</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SendFlow({ actorName }: { actorName?: string }) {
+  const [step, setStep] = useState(1);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [qErr, setQErr] = useState("");
   const [loadingQ, setLoadingQ] = useState(true);
 
-  const [selQ, setSelQ] = useState<string>("");
+  const [selQ, setSelQ] = useState<Quotation | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingT, setLoadingT] = useState(false);
+  const [selTpl, setSelTpl] = useState<Template | null>(null);
+
+  const [imgKey, setImgKey] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [hasImage, setHasImage] = useState<boolean | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,106 +91,92 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   const [batch, setBatch] = useState<Batch | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Tải danh sách báo giá
   useEffect(() => {
-    getJSON<Quotation[]>("/api/quotations")
-      .then((qs) => setQuotations(qs))
-      .catch((e) => setQErr(e.message))
-      .finally(() => setLoadingQ(false));
+    getJSON<Quotation[]>("/api/quotations").then(setQuotations).catch((e) => setQErr(e.message)).finally(() => setLoadingQ(false));
   }, []);
 
-  const pickQuotation = useCallback(async (id: string) => {
-    setSelQ(id);
-    setTemplates([]);
-    setLoadingT(true);
-    setErr("");
-    try {
-      setTemplates(await getJSON<Template[]>(`/api/quotations/${id}/templates`));
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setLoadingT(false);
-    }
+  // Bước 1 -> 2
+  const pickQuotation = useCallback(async (q: Quotation) => {
+    setSelQ(q); setSelTpl(null); setTemplates([]); setErr(""); setLoadingT(true); setStep(2);
+    try { setTemplates(await getJSON<Template[]>(`/api/quotations/${q.id}/templates`)); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setLoadingT(false); }
   }, []);
 
-  const doPreview = useCallback(async (templateId: string) => {
-    setBusy(true);
-    setErr("");
+  // Bước 2 -> 3
+  const pickTemplate = useCallback((t: Template) => {
+    setSelTpl(t); setErr(""); setHasImage(null); setImgKey((k) => k + 1); setStep(3);
+  }, []);
+
+  async function uploadImage(file: File | undefined) {
+    if (!file || !selTpl) return;
+    if (!file.type.startsWith("image/")) return setErr("File phải là ảnh.");
+    if (file.size > 5 * 1024 * 1024) return setErr("Ảnh quá lớn (tối đa 5MB).");
+    setErr(""); setUploading(true);
     try {
-      setPreview(await postJSON<Preview>("/api/send/preview", { templateId, actor: { name: actorName } }));
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }, [actorName]);
+      const res = await fetch(`/api/templates/${selTpl.id}/image`, { method: "POST", headers: { "content-type": file.type }, body: file });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `Lỗi ${res.status}`);
+      setHasImage(true); setImgKey((k) => k + 1);
+    } catch (e) { setErr((e as Error).message); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+  }
+
+  // Bước 3 -> 4: tạo preview (lọc khách, dựng bảng)
+  const goPreview = useCallback(async () => {
+    if (!selTpl) return;
+    setBusy(true); setErr("");
+    try { setPreview(await postJSON<Preview>("/api/send/preview", { templateId: selTpl.id, actor: { name: actorName } })); setStep(4); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  }, [selTpl, actorName]);
 
   const doConfirm = useCallback(async () => {
     if (!preview) return;
-    setBusy(true);
-    setErr("");
+    setBusy(true); setErr("");
     try {
       const r = await postJSON<{ batchId: string }>("/api/send/confirm", { batchId: preview.batch.id, actor: { name: actorName } });
-      setPreview(null);
-      setBatchId(String(r.batchId));
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+      setPreview(null); setBatchId(String(r.batchId));
+    } catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
   }, [preview, actorName]);
 
-  // Poll trạng thái batch sau khi confirm
+  // Poll trạng thái sau khi gửi
   useEffect(() => {
     if (!batchId) return;
     const tick = async () => {
       try {
         const b = await getJSON<Batch>(`/api/send/batches/${batchId}`);
         setBatch(b);
-        if (TERMINAL.includes(b.status) && pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      } catch {
-        /* giữ nguyên */
-      }
+        if (TERMINAL.includes(b.status) && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      } catch { /* giữ nguyên */ }
     };
     tick();
     pollRef.current = setInterval(tick, 2000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); pollRef.current = null; };
   }, [batchId]);
 
-  const resetTracking = () => {
-    setBatchId("");
-    setBatch(null);
-    if (selQ) pickQuotation(selQ);
-  };
+  function resetAll() {
+    setBatchId(""); setBatch(null); setPreview(null); setSelTpl(null); setSelQ(null); setStep(1); setErr("");
+  }
 
-  // ---- Đang theo dõi 1 lệnh gửi ----
+  const errBox = err ? <div style={sx("background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px")}>{err}</div> : null;
+
+  // ================= Đang theo dõi lệnh gửi =================
   if (batchId) {
     const sentCount = batch?.jobs.filter((j) => j.status === "SENT").length ?? 0;
     const failedCount = batch?.jobs.filter((j) => j.status === "FAILED").length ?? 0;
     const done = batch ? TERMINAL.includes(batch.status) : false;
     return (
-      <div style={sx("max-width:820px")}>
+      <div style={sx("max-width:840px")}>
         <div style={sx(card)}>
           <div style={sx("display:flex; align-items:center; gap:10px")}>
-            <div style={sx("font-size:16px; font-weight:700; color:#14261A; flex:1")}>
-              Đang gửi: {batch?.code || batchId}
-            </div>
-            <span style={sx(`font-size:12px; font-weight:700; padding:5px 12px; border-radius:20px; background:${done ? "#E7F5EC" : "#FDF3E0"}; color:${done ? "#1F7440" : "#B07208"}`)}>
-              {batch?.status || "..."}
-            </span>
+            <div style={sx("font-size:16px; font-weight:700; color:#14261A; flex:1")}>Đang gửi: {batch?.code || batchId}</div>
+            <span style={sx(`font-size:12px; font-weight:700; padding:5px 12px; border-radius:20px; background:${done ? "#E7F5EC" : "#FDF3E0"}; color:${done ? "#1F7440" : "#B07208"}`)}>{batch?.status || "..."}</span>
           </div>
           <div style={sx("font-size:13px; color:#7B8A80; margin-top:6px")}>
-            {batch ? `${batch.template.name} · ${batch.channel?.name || "kênh mặc định"} · ` : ""}
-            Thành công {sentCount}/{batch?.recipientCount ?? 0}{failedCount ? `, lỗi ${failedCount}` : ""}
+            {batch ? `${batch.template.name} · ${batch.channel?.name || "kênh mặc định"} · ` : ""}Thành công {sentCount}/{batch?.recipientCount ?? 0}{failedCount ? `, lỗi ${failedCount}` : ""}
           </div>
           {!done && <div style={sx("font-size:12.5px; color:#2F6FD6; margin-top:8px")}>⏳ Worker đang gửi, tự cập nhật mỗi 2s...</div>}
-
           <div style={sx("margin-top:16px; display:flex; flex-direction:column; gap:8px")}>
             {batch?.jobs.map((j) => (
               <div key={j.id} style={sx("display:flex; align-items:center; gap:12px; padding:11px 13px; border:1px solid #F0F3F0; border-radius:11px")}>
@@ -176,147 +188,167 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               </div>
             ))}
           </div>
-
-          <HButton s="margin-top:18px; height:42px; padding:0 20px; border:none; border-radius:11px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:14px; font-weight:600; cursor:pointer" onClick={resetTracking}>
-            ← Gửi lệnh khác
-          </HButton>
+          <HButton s={`${green} margin-top:18px`} onClick={resetAll}>← Gửi lệnh khác</HButton>
         </div>
       </div>
     );
   }
 
-  // ---- Chọn báo giá + template ----
+  // ================= Wizard 4 bước =================
   return (
-    <div style={sx("display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:14px; align-items:start")}>
-      {/* Cột báo giá */}
-      <div style={sx(card)}>
-        <div style={sx("font-size:15px; font-weight:700; color:#14261A; margin-bottom:12px")}>1. Chọn báo giá</div>
-        {loadingQ && <div style={sx("font-size:13px; color:#8B9A90")}>Đang tải...</div>}
-        {qErr && <div style={sx("font-size:13px; color:#B3261E; line-height:1.5")}>Lỗi: {qErr}<br />Kiểm tra DATABASE_URL đã cấu hình chưa.</div>}
-        {!loadingQ && !qErr && quotations.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có báo giá nào. Chạy seed hoặc tạo báo giá.</div>}
-        <div style={sx("display:flex; flex-direction:column; gap:6px")}>
-          {quotations.map((q) => {
-            const on = q.id === selQ;
-            return (
-              <HButton key={q.id} onClick={() => pickQuotation(q.id)}
-                s={`display:block; width:100%; text-align:left; border:1px solid ${on ? "#3EA85C" : "#E9EEE9"}; border-radius:11px; padding:11px 13px; cursor:pointer; background:${on ? "#F0F7F1" : "#fff"}`}
-                h={on ? "" : "background:#F7FAF7"}>
-                <div style={sx("font-size:14px; font-weight:600; color:#14261A")}>{q.code}</div>
-                <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.title || "—"} · {q._count.templates} template</div>
-              </HButton>
-            );
-          })}
-        </div>
-      </div>
+    <div style={sx("max-width:760px")}>
+      <Stepper step={step} />
+      {errBox}
 
-      {/* Cột template */}
-      <div style={sx(card)}>
-        <div style={sx("font-size:15px; font-weight:700; color:#14261A; margin-bottom:12px")}>2. Chọn template để gửi</div>
-        {!selQ && <div style={sx("font-size:13px; color:#8B9A90")}>Chọn một báo giá ở bên trái.</div>}
-        {loadingT && <div style={sx("font-size:13px; color:#8B9A90")}>Đang tải template...</div>}
-        {err && <div style={sx("font-size:13px; color:#B3261E; margin-bottom:10px")}>Lỗi: {err}</div>}
-        {selQ && !loadingT && templates.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Báo giá này chưa có template.</div>}
-        <div style={sx("display:flex; flex-direction:column; gap:10px")}>
-          {templates.map((t) => (
-            <div key={t.id} style={sx("display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px")}>
-              <div style={sx("width:38px; height:38px; border-radius:11px; background:#F1F5F1; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0")}>{t.icon || "📄"}</div>
-              <div style={sx("min-width:0; flex:1")}>
-                <div style={sx("font-size:14px; font-weight:600; color:#14261A")}>{t.name}</div>
-                <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel ? `${t.channel.type}` : "chưa gắn kênh"}</div>
-              </div>
-              <HButton s={`height:38px; padding:0 16px; border:none; border-radius:10px; color:#fff; font-size:13px; font-weight:600; cursor:pointer; background:linear-gradient(140deg,#3EA85C,#1F7440); opacity:${busy ? ".6" : "1"}`} onClick={() => doPreview(t.id)}>
-                Xem trước & gửi
-              </HButton>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Modal preview */}
-      {preview && (
-        <div style={sx("position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px")}>
-          <div onClick={() => setPreview(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
-          <div style={sx("position:relative; width:100%; max-width:560px; max-height:88vh; overflow:auto; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5); animation:agoRise .3s ease both")}>
-            <div style={sx("display:flex; align-items:center; gap:10px")}>
-              <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Xem trước báo giá {preview.quotation.code}</div>
-              <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setPreview(null)}>✕</HButton>
-            </div>
-
-            {/* Đầu mục (giống bot: mã lệnh, thị trường, số khách, template) */}
-            <div style={sx("background:linear-gradient(135deg,#1F7440,#123E24); color:#fff; border-radius:14px; padding:15px 16px; margin-top:12px")}>
-              <div style={sx("font-size:14px; font-weight:700; letter-spacing:.02em")}>📋 BÁO GIÁ {preview.quotation.market || preview.quotation.code} — XEM TRƯỚC</div>
-              <div style={sx("display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:10px; font-size:12.5px; color:#CDE8D5")}>
-                <div>Mã lệnh: <b style={sx("color:#fff")}>{preview.batch.code}</b></div>
-                <div>Số khách nhận: <b style={sx("color:#fff")}>{preview.recipients.length}</b></div>
-                <div>Template: <b style={sx("color:#fff")}>{preview.template.name}</b></div>
-                <div>Kênh: <b style={sx("color:#fff")}>{preview.channel?.name || "mặc định"}</b></div>
-                <div>Hiệu lực đến: <b style={sx("color:#fff")}>{fmtDate(preview.quotation.validUntil)}</b></div>
-                <div>Tổng: <b style={sx("color:#fff")}>{money(preview.quotation.totalAmount, preview.quotation.currency)}</b></div>
-              </div>
-            </div>
-
-            {/* Bảng sản phẩm */}
-            <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Bảng sản phẩm ({preview.items.length})</div>
-            {preview.items.length === 0 ? (
-              <div style={sx("font-size:13px; color:#8B9A90; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:12px; padding:12px")}>Báo giá chưa có sản phẩm.</div>
-            ) : (
-              <div style={sx("border:1px solid #E9EEE9; border-radius:12px; overflow:hidden")}>
-                <table style={sx("width:100%; border-collapse:collapse; font-size:12.5px")}>
-                  <thead>
-                    <tr style={sx("background:#EAF3EC; color:#1F7440")}>
-                      <th style={sx("text-align:center; padding:7px 8px; font-weight:700; width:34px")}>#</th>
-                      <th style={sx("text-align:left; padding:7px 8px; font-weight:700")}>Mặt hàng</th>
-                      <th style={sx("text-align:center; padding:7px 8px; font-weight:700")}>ĐVT</th>
-                      <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>SL</th>
-                      <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>Đơn giá</th>
-                      <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>Thành tiền</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.items.map((it, i) => (
-                      <tr key={i} style={sx(`border-top:1px solid #EEF2EE; background:${i % 2 ? "#FBFDFB" : "#fff"}`)}>
-                        <td style={sx("text-align:center; padding:6px 8px; color:#8B9A90")}>{it.no}</td>
-                        <td style={sx("padding:6px 8px; color:#14261A")}>{it.product}{it.packing ? <span style={sx("color:#8B9A90")}> · {it.packing}</span> : null}</td>
-                        <td style={sx("text-align:center; padding:6px 8px; color:#4A5A4E")}>{it.unit || "—"}</td>
-                        <td style={sx("text-align:right; padding:6px 8px; color:#4A5A4E")}>{num(it.quantity).toLocaleString("vi-VN")}</td>
-                        <td style={sx("text-align:right; padding:6px 8px; color:#4A5A4E")}>{num(it.price).toLocaleString("vi-VN")}</td>
-                        <td style={sx("text-align:right; padding:6px 8px; font-weight:600; color:#14261A")}>{(num(it.quantity) * num(it.price)).toLocaleString("vi-VN")}</td>
-                      </tr>
-                    ))}
-                    <tr style={sx("border-top:2px solid #DCE7DE; background:#F6F9F6")}>
-                      <td colSpan={5} style={sx("text-align:right; padding:8px; font-weight:700; color:#3C4A40")}>Tổng cộng</td>
-                      <td style={sx("text-align:right; padding:8px; font-weight:700; color:#1F7440")}>{money(preview.quotation.totalAmount, preview.quotation.currency)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Ảnh header (gửi kèm khi dùng WhatsApp template)</div>
-            <img src={`/api/templates/${preview.template.id}/image`} alt="Ảnh header" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "block"); }} style={sx("width:100%; border:1px solid #E9EEE9; border-radius:12px; display:block")} />
-            <div style={sx("display:none; font-size:12.5px; color:#8B9A90; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:12px; padding:12px")}>Template chưa có ảnh header — sẽ gửi không kèm ảnh.</div>
-
-            <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Nội dung gửi (mẫu cho khách đầu tiên)</div>
-            <div style={sx("background:#F6F9F6; border:1px solid #E9EEE9; border-radius:12px; padding:14px; font-size:13.5px; line-height:1.7; color:#3C4A40; white-space:pre-wrap")}>{preview.sample}</div>
-
-            <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Danh sách khách nhận</div>
-            <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:200px; overflow:auto")}>
-              {preview.recipients.map((r) => (
-                <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:8px 11px; border:1px solid #F0F3F0; border-radius:10px")}>
-                  <span style={sx("font-size:13.5px; font-weight:600; color:#14261A; flex:1")}>{r.name}</span>
-                  <span style={sx("font-size:12.5px; color:#8B9A90")}>{r.phone || "(thiếu SĐT)"}</span>
+      {/* Bước 1: chọn báo giá */}
+      {step === 1 && (
+        <div style={sx(card)}>
+          <div style={sx("font-size:15px; font-weight:700; color:#14261A; margin-bottom:12px")}>Chọn báo giá cần gửi</div>
+          {loadingQ && <div style={sx("font-size:13px; color:#8B9A90")}>Đang tải...</div>}
+          {qErr && <div style={sx("font-size:13px; color:#B3261E")}>Lỗi: {qErr}</div>}
+          {!loadingQ && !qErr && quotations.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có báo giá nào.</div>}
+          <div style={sx("display:flex; flex-direction:column; gap:8px")}>
+            {quotations.map((q) => (
+              <div key={q.id} onClick={() => pickQuotation(q)} style={sx("display:flex; align-items:center; gap:12px; border:1px solid #E9EEE9; border-radius:12px; padding:13px; cursor:pointer")}>
+                <div style={sx("width:40px; height:40px; border-radius:11px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0")}>📄</div>
+                <div style={sx("min-width:0; flex:1")}>
+                  <div style={sx("font-size:14.5px; font-weight:600; color:#14261A")}>{q.code}</div>
+                  <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.title || "—"} · {q._count.templates} template</div>
                 </div>
-              ))}
-            </div>
+                <div style={sx("text-align:right; flex-shrink:0")}>
+                  <div style={sx("font-size:13.5px; font-weight:700; color:#14261A")}>{money(q.totalAmount, q.currency)}</div>
+                  <div style={sx("font-size:11.5px; color:#7B8A80")}>{q.market || q.status}</div>
+                </div>
+                <span style={sx("color:#B9C5BC; font-size:18px")}>›</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-            {err && <div style={sx("font-size:13px; color:#B3261E; margin-top:12px")}>Lỗi: {err}</div>}
+      {/* Bước 2: chọn template */}
+      {step === 2 && (
+        <div style={sx(card)}>
+          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Chọn template trong {selQ?.code}</div>
+            <HButton s={ghost} onClick={() => setStep(1)}>‹ Đổi báo giá</HButton>
+          </div>
+          {loadingT && <div style={sx("font-size:13px; color:#8B9A90")}>Đang tải template...</div>}
+          {!loadingT && templates.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Báo giá này chưa có template. Vào menu Báo giá để gắn template.</div>}
+          <div style={sx("display:flex; flex-direction:column; gap:8px")}>
+            {templates.map((t) => (
+              <div key={t.id} onClick={() => pickTemplate(t)} style={sx("display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px; cursor:pointer")}>
+                <div style={sx("width:38px; height:38px; border-radius:11px; background:#F1F5F1; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0")}>{t.icon || "📄"}</div>
+                <div style={sx("min-width:0; flex:1")}>
+                  <div style={sx("font-size:14px; font-weight:600; color:#14261A")}>{t.name}</div>
+                  <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel ? t.channel.type : "chưa gắn kênh"}{t.waTemplateName ? ` · ${t.waTemplateName}` : ""}</div>
+                </div>
+                <span style={sx("color:#B9C5BC; font-size:18px")}>›</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-            <div style={sx("display:flex; gap:10px; margin-top:20px")}>
-              <HButton s={`flex:1; height:46px; border:none; border-radius:11px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:14.5px; font-weight:600; cursor:pointer; opacity:${busy ? ".6" : "1"}`} onClick={doConfirm}>
-                {busy ? "Đang xử lý..." : `Xác nhận gửi ${preview.recipients.length} khách`}
-              </HButton>
-              <HButton s="height:46px; padding:0 18px; border:1px solid #DCE3DC; border-radius:11px; background:#fff; color:#4A5A4E; font-size:14.5px; font-weight:500; cursor:pointer" h="background:#F7FAF7" onClick={() => setPreview(null)}>Hủy</HButton>
+      {/* Bước 3: điền ảnh */}
+      {step === 3 && selTpl && (
+        <div style={sx(card)}>
+          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:6px")}>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Ảnh gửi kèm — {selTpl.name}</div>
+            <HButton s={ghost} onClick={() => setStep(2)}>‹ Đổi template</HButton>
+          </div>
+          <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Ảnh này gửi vào <b>header</b> của template WhatsApp (giống bot). Có thể tải mới hoặc thay ảnh.</div>
+          <input ref={fileRef} type="file" accept="image/*" style={sx("display:none")} onChange={(e) => uploadImage(e.target.files?.[0])} />
+          {hasImage !== false ? (
+            <>
+              <img src={`/api/templates/${selTpl.id}/image?t=${imgKey}`} alt="Ảnh header" onLoad={() => setHasImage(true)} onError={() => setHasImage(false)}
+                style={sx(`width:100%; max-height:340px; object-fit:contain; border:1px solid #E9EEE9; border-radius:12px; display:${hasImage ? "block" : "none"}; background:#FAFCFA`)} />
+              {hasImage === null && <div style={sx("font-size:13px; color:#8B9A90; padding:20px; text-align:center")}>Đang kiểm tra ảnh...</div>}
+              {hasImage && <HButton s={`${ghost} margin-top:12px; width:100%`} onClick={() => fileRef.current?.click()}>{uploading ? "Đang tải..." : "Thay ảnh khác"}</HButton>}
+            </>
+          ) : (
+            <div onClick={() => fileRef.current?.click()} style={sx("border:2px dashed #D5DED6; border-radius:13px; padding:34px 15px; text-align:center; cursor:pointer; background:#FAFCFA")}>
+              <div style={sx("font-size:34px; margin-bottom:6px")}>🖼️</div>
+              <div style={sx("font-size:14px; font-weight:600; color:#3C4A40")}>{uploading ? "Đang tải..." : "Bấm để tải ảnh báo giá lên"}</div>
+              <div style={sx("font-size:12px; color:#8B9A90; margin-top:3px")}>PNG/JPG, tối đa 5MB</div>
             </div>
+          )}
+          <div style={sx("display:flex; gap:10px; margin-top:18px")}>
+            <HButton s={`${green} flex:1; opacity:${busy ? ".6" : "1"}`} onClick={goPreview}>{busy ? "Đang xử lý..." : "Tiếp tục →"}</HButton>
+            {hasImage === false && <HButton s={ghost} onClick={goPreview}>Bỏ qua ảnh</HButton>}
+          </div>
+        </div>
+      )}
+
+      {/* Bước 4: danh sách & gửi */}
+      {step === 4 && preview && (
+        <div style={sx(card)}>
+          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Kiểm tra & gửi</div>
+            <HButton s={ghost} onClick={() => setStep(3)}>‹ Đổi ảnh</HButton>
+          </div>
+
+          {/* Đầu mục */}
+          <div style={sx("background:linear-gradient(135deg,#1F7440,#123E24); color:#fff; border-radius:14px; padding:15px 16px")}>
+            <div style={sx("font-size:14px; font-weight:700; letter-spacing:.02em")}>📋 BÁO GIÁ {preview.quotation.market || preview.quotation.code}</div>
+            <div style={sx("display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:10px; font-size:12.5px; color:#CDE8D5")}>
+              <div>Mã lệnh: <b style={sx("color:#fff")}>{preview.batch.code}</b></div>
+              <div>Số khách nhận: <b style={sx("color:#fff")}>{preview.recipients.length}</b></div>
+              <div>Template: <b style={sx("color:#fff")}>{preview.template.name}</b></div>
+              <div>Kênh: <b style={sx("color:#fff")}>{preview.channel?.name || "mặc định"}</b></div>
+              <div>Hiệu lực đến: <b style={sx("color:#fff")}>{fmtDate(preview.quotation.validUntil)}</b></div>
+              <div>Tổng: <b style={sx("color:#fff")}>{money(preview.quotation.totalAmount, preview.quotation.currency)}</b></div>
+            </div>
+          </div>
+
+          {/* Bảng sản phẩm */}
+          <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Bảng sản phẩm ({preview.items.length})</div>
+          <div style={sx("border:1px solid #E9EEE9; border-radius:12px; overflow:auto")}>
+            <table style={sx("width:100%; border-collapse:collapse; font-size:12.5px; min-width:460px")}>
+              <thead>
+                <tr style={sx("background:#EAF3EC; color:#1F7440")}>
+                  <th style={sx("text-align:center; padding:7px 8px; font-weight:700; width:34px")}>#</th>
+                  <th style={sx("text-align:left; padding:7px 8px; font-weight:700")}>Mặt hàng</th>
+                  <th style={sx("text-align:center; padding:7px 8px; font-weight:700")}>ĐVT</th>
+                  <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>SL</th>
+                  <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>Đơn giá</th>
+                  <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>Thành tiền</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.items.map((it, i) => (
+                  <tr key={i} style={sx(`border-top:1px solid #EEF2EE; background:${i % 2 ? "#FBFDFB" : "#fff"}`)}>
+                    <td style={sx("text-align:center; padding:6px 8px; color:#8B9A90")}>{it.no}</td>
+                    <td style={sx("padding:6px 8px; color:#14261A")}>{it.product}{it.packing ? <span style={sx("color:#8B9A90")}> · {it.packing}</span> : null}</td>
+                    <td style={sx("text-align:center; padding:6px 8px; color:#4A5A4E")}>{it.unit || "—"}</td>
+                    <td style={sx("text-align:right; padding:6px 8px; color:#4A5A4E")}>{num(it.quantity).toLocaleString("vi-VN")}</td>
+                    <td style={sx("text-align:right; padding:6px 8px; color:#4A5A4E")}>{num(it.price).toLocaleString("vi-VN")}</td>
+                    <td style={sx("text-align:right; padding:6px 8px; font-weight:600; color:#14261A")}>{(num(it.quantity) * num(it.price)).toLocaleString("vi-VN")}</td>
+                  </tr>
+                ))}
+                <tr style={sx("border-top:2px solid #DCE7DE; background:#F6F9F6")}>
+                  <td colSpan={5} style={sx("text-align:right; padding:8px; font-weight:700; color:#3C4A40")}>Tổng cộng</td>
+                  <td style={sx("text-align:right; padding:8px; font-weight:700; color:#1F7440")}>{money(preview.quotation.totalAmount, preview.quotation.currency)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Danh sách khách nhận */}
+          <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Danh sách gửi ({preview.recipients.length})</div>
+          <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto")}>
+            {preview.recipients.map((r) => (
+              <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
+                <span style={sx("width:30px; height:30px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0")}>{r.name.trim().split(/\s+/).slice(-2).map((x) => x[0]).join("").toUpperCase()}</span>
+                <span style={sx("font-size:13.5px; font-weight:600; color:#14261A; flex:1")}>{r.name}</span>
+                <span style={sx("font-size:12.5px; color:#8B9A90")}>{r.phone || "(thiếu SĐT)"}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={sx("display:flex; gap:10px; margin-top:20px")}>
+            <HButton s={`${green} flex:1; height:46px; opacity:${busy ? ".6" : "1"}`} onClick={doConfirm}>{busy ? "Đang gửi..." : `Gửi cho ${preview.recipients.length} khách`}</HButton>
+            <HButton s={ghost} onClick={() => { setPreview(null); setStep(3); }}>Hủy</HButton>
           </div>
         </div>
       )}
