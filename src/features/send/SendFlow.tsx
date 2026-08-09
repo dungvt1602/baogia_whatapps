@@ -8,7 +8,16 @@ import { sx, HButton } from "@/components/common/ui";
 type Quotation = { id: string; code: string; title: string | null; status: string; market: string | null; _count: { templates: number } };
 type Template = { id: string; name: string; icon: string | null; body: string | null; channel: { id: string; name: string; type: string } | null; _count: { customers: number } };
 type Recipient = { id: string; name: string; phone: string };
-type Preview = { batch: { id: string; code: string; quotationId: string; recipientCount: number; status: string }; channel: { name: string; type: string } | null; template: { id: string; name: string }; sample: string; recipients: Recipient[] };
+type PItem = { no: number; product: string; packing: string | null; unit: string | null; quantity: unknown; price: unknown };
+type Preview = {
+  batch: { id: string; code: string; quotationId: string; recipientCount: number; status: string };
+  channel: { name: string; type: string } | null;
+  template: { id: string; name: string };
+  quotation: { code: string; title: string | null; market: string | null; currency: string; totalAmount: unknown; validUntil: string | null };
+  items: PItem[];
+  sample: string;
+  recipients: Recipient[];
+};
 type Job = { id: string; toName: string | null; toPhone: string | null; channel: string; status: string; messageId: string | null; error: string | null; retryCount: number };
 type Batch = { id: string; code: string; status: string; note: string | null; recipientCount: number; quotation: { code: string; title: string | null }; template: { name: string }; channel: { name: string; type: string } | null; jobs: Job[] };
 
@@ -22,6 +31,9 @@ const jobColor: Record<string, string> = {
 };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
+const num = (v: unknown) => { const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0; };
+const money = (v: unknown, cur = "VND") => `${num(v).toLocaleString("vi-VN")} ${cur}`;
+const fmtDate = (s: string | null) => (s ? new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(s)) : "—");
 
 async function getJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -226,12 +238,59 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
           <div onClick={() => setPreview(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
           <div style={sx("position:relative; width:100%; max-width:560px; max-height:88vh; overflow:auto; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5); animation:agoRise .3s ease both")}>
             <div style={sx("display:flex; align-items:center; gap:10px")}>
-              <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Xem trước — {preview.template.name}</div>
+              <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Xem trước báo giá {preview.quotation.code}</div>
               <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setPreview(null)}>✕</HButton>
             </div>
-            <div style={sx("font-size:13px; color:#7B8A80; margin-top:6px")}>
-              Lệnh {preview.batch.code} · {preview.recipients.length} khách · {preview.channel?.name || "kênh mặc định"}
+
+            {/* Đầu mục (giống bot: mã lệnh, thị trường, số khách, template) */}
+            <div style={sx("background:linear-gradient(135deg,#1F7440,#123E24); color:#fff; border-radius:14px; padding:15px 16px; margin-top:12px")}>
+              <div style={sx("font-size:14px; font-weight:700; letter-spacing:.02em")}>📋 BÁO GIÁ {preview.quotation.market || preview.quotation.code} — XEM TRƯỚC</div>
+              <div style={sx("display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:10px; font-size:12.5px; color:#CDE8D5")}>
+                <div>Mã lệnh: <b style={sx("color:#fff")}>{preview.batch.code}</b></div>
+                <div>Số khách nhận: <b style={sx("color:#fff")}>{preview.recipients.length}</b></div>
+                <div>Template: <b style={sx("color:#fff")}>{preview.template.name}</b></div>
+                <div>Kênh: <b style={sx("color:#fff")}>{preview.channel?.name || "mặc định"}</b></div>
+                <div>Hiệu lực đến: <b style={sx("color:#fff")}>{fmtDate(preview.quotation.validUntil)}</b></div>
+                <div>Tổng: <b style={sx("color:#fff")}>{money(preview.quotation.totalAmount, preview.quotation.currency)}</b></div>
+              </div>
             </div>
+
+            {/* Bảng sản phẩm */}
+            <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Bảng sản phẩm ({preview.items.length})</div>
+            {preview.items.length === 0 ? (
+              <div style={sx("font-size:13px; color:#8B9A90; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:12px; padding:12px")}>Báo giá chưa có sản phẩm.</div>
+            ) : (
+              <div style={sx("border:1px solid #E9EEE9; border-radius:12px; overflow:hidden")}>
+                <table style={sx("width:100%; border-collapse:collapse; font-size:12.5px")}>
+                  <thead>
+                    <tr style={sx("background:#EAF3EC; color:#1F7440")}>
+                      <th style={sx("text-align:center; padding:7px 8px; font-weight:700; width:34px")}>#</th>
+                      <th style={sx("text-align:left; padding:7px 8px; font-weight:700")}>Mặt hàng</th>
+                      <th style={sx("text-align:center; padding:7px 8px; font-weight:700")}>ĐVT</th>
+                      <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>SL</th>
+                      <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>Đơn giá</th>
+                      <th style={sx("text-align:right; padding:7px 8px; font-weight:700")}>Thành tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.items.map((it, i) => (
+                      <tr key={i} style={sx(`border-top:1px solid #EEF2EE; background:${i % 2 ? "#FBFDFB" : "#fff"}`)}>
+                        <td style={sx("text-align:center; padding:6px 8px; color:#8B9A90")}>{it.no}</td>
+                        <td style={sx("padding:6px 8px; color:#14261A")}>{it.product}{it.packing ? <span style={sx("color:#8B9A90")}> · {it.packing}</span> : null}</td>
+                        <td style={sx("text-align:center; padding:6px 8px; color:#4A5A4E")}>{it.unit || "—"}</td>
+                        <td style={sx("text-align:right; padding:6px 8px; color:#4A5A4E")}>{num(it.quantity).toLocaleString("vi-VN")}</td>
+                        <td style={sx("text-align:right; padding:6px 8px; color:#4A5A4E")}>{num(it.price).toLocaleString("vi-VN")}</td>
+                        <td style={sx("text-align:right; padding:6px 8px; font-weight:600; color:#14261A")}>{(num(it.quantity) * num(it.price)).toLocaleString("vi-VN")}</td>
+                      </tr>
+                    ))}
+                    <tr style={sx("border-top:2px solid #DCE7DE; background:#F6F9F6")}>
+                      <td colSpan={5} style={sx("text-align:right; padding:8px; font-weight:700; color:#3C4A40")}>Tổng cộng</td>
+                      <td style={sx("text-align:right; padding:8px; font-weight:700; color:#1F7440")}>{money(preview.quotation.totalAmount, preview.quotation.currency)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div style={sx("font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px")}>Ảnh header (gửi kèm khi dùng WhatsApp template)</div>
             <img src={`/api/templates/${preview.template.id}/image`} alt="Ảnh header" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "block"); }} style={sx("width:100%; border:1px solid #E9EEE9; border-radius:12px; display:block")} />

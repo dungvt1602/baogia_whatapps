@@ -114,10 +114,27 @@ export async function previewSend(params: {
     note: `${recipients.length} khách · template ${template.name}`,
   });
 
+  const q = template.quotation;
   return {
     batch,
     channel,
     template: { id: template.id, name: template.name, body: template.body },
+    quotation: {
+      code: q.code,
+      title: q.title,
+      market: q.market,
+      currency: q.currency,
+      totalAmount: q.totalAmount,
+      validUntil: q.validUntil,
+    },
+    items: q.items.map((it) => ({
+      no: it.no,
+      product: it.product,
+      packing: it.packing,
+      unit: it.unit,
+      quantity: it.quantity,
+      price: it.price,
+    })),
     sample,
     recipients: recipients.map((c) => ({
       id: c.id,
