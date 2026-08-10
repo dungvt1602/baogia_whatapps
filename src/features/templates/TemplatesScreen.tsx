@@ -18,7 +18,7 @@ type Tpl = {
   waTemplateName: string | null;
   quotation: { id: string; code: string; title: string | null } | null;
   channel: { id: string; name: string; type: string } | null;
-  _count: { customers: number };
+  _count: { customerLinks: number };
 };
 type TplDetail = {
   id: string;
@@ -41,7 +41,7 @@ type TplDetail = {
   } | null;
   channel: { id: string; name: string; type: string; accountId: string } | null;
   image: { mime: string; updatedAt: string } | null;
-  _count: { customers: number };
+  _count: { customerLinks: number };
 };
 type Cust = {
   id: string;
@@ -221,7 +221,7 @@ export default function TemplatesScreen() {
   async function removeFromTemplate(customerId: string) {
     setErr("");
     try {
-      await patchJSON(`/api/customers/${customerId}`, { templateId: null });
+      await sendJSON("DELETE", `/api/templates/${selT}/customers/${customerId}`);
       await refresh();
     } catch (e) {
       setErr((e as Error).message);
@@ -662,7 +662,7 @@ export default function TemplatesScreen() {
                     "font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis",
                   )}
                 >
-                  {t.quotation?.code || "—"} · {t._count.customers} khách
+                  {t.quotation?.code || "—"} · {t._count.customerLinks} khách
                   {t.channel ? ` · ${t.channel.type}` : ""}
                 </div>
               </div>

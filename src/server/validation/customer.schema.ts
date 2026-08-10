@@ -14,9 +14,8 @@ export const createCustomerSchema = z.object({
 });
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 
-// PATCH: mọi field optional; templateId có thể null (đưa về kho).
+// PATCH: chỉ sửa thông tin khách (gán/gỡ template dùng API link riêng).
 export const patchCustomerSchema = z.object({
-  templateId: numOrStr.nullable().optional(),
   name: z.string().optional(),
   phone: z.string().nullish(),
   whatsappPhone: z.string().nullish(),

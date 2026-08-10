@@ -40,7 +40,7 @@ export function getQuotationDetail(id: string) {
         orderBy: { createdAt: "asc" },
         include: {
           channel: { select: { type: true } },
-          _count: { select: { customers: true } },
+          _count: { select: { customerLinks: true } },
         },
       },
       _count: { select: { templates: true } },

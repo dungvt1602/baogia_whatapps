@@ -222,8 +222,8 @@ model Template {
   channel       Channel?                @relation(fields: [channelId], references: [id])
   // 1-N: template -> quotation_template_sends (legacy)
   templateSends QuotationTemplateSend[]
-  // 1-N: template -> customer
-  customers     Customer[]
+  // N-N: template <-> customer (qua bảng nối template_customers)
+  customerLinks TemplateCustomer[]
   // 1-N: template -> lệnh gửi
   sendBatches   SendBatch[]
   // 1-1: ảnh header do người dùng upload (gửi kèm khi dùng WhatsApp template) — giống bot
@@ -267,7 +267,6 @@ model QuotationTemplateSend {
 
 model Customer {
   id               BigInt   @id @default(autoincrement())
-  templateId       BigInt?  @map("template_id") // null = trong kho, chưa thuộc template nào
   name             String   @db.VarChar(255)
   phone            String?  @db.VarChar(30)
   whatsappPhone    String?  @map("whatsapp_phone") @db.VarChar(30) // số nhận WhatsApp
@@ -278,12 +277,27 @@ model Customer {
   receiveQuotation Boolean  @default(true) @map("receive_quotation") // có nhận báo giá không
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
-  template Template? @relation(fields: [templateId], references: [id])
+  // N-N: customer <-> template (qua bảng nối template_customers)
+  templateLinks TemplateCustomer[]
   // 1-1: customer -> audit_log
   auditLog AuditLog?
   sendJobs SendJob[]
 
   @@map("customers")
+}
+
+// Bảng nối N-N: 1 khách có thể vào nhiều template và 1 template có nhiều khách.
+model TemplateCustomer {
+  templateId BigInt   @map("template_id")
+  customerId BigInt   @map("customer_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@id([templateId, customerId])
+  @@index([customerId])
+  @@map("template_customers")
 }
 
 // 1-1 với customer (customer_id unique). changed_by tham chiếu users.

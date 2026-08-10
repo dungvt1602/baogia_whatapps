@@ -4,7 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import type { CreateCustomerInput, PatchCustomerInput } from "@/server/validation/customer.schema";
 
 export type ListCustomersOptions = {
-  excludeTemplate?: string | null; // trả ứng viên để thêm vào 1 template (khách trong kho HOẶC ở template khác)
+  excludeTemplate?: string | null; // trả ứng viên CHƯA thuộc template này
   market?: string | null; // lọc theo quốc gia (thị trường)
   search?: string | null; // tìm theo tên / SĐT / email
 };
@@ -15,7 +15,8 @@ function buildCustomerWhere(opts: ListCustomersOptions): Prisma.CustomerWhereInp
   const and: Prisma.CustomerWhereInput[] = [];
 
   if (excludeTemplate) {
-    and.push({ OR: [{ templateId: null }, { templateId: { not: BigInt(excludeTemplate) } }] });
+    // N-N: ứng viên = khách CHƯA có link tới template này.
+    and.push({ NOT: { templateLinks: { some: { templateId: BigInt(excludeTemplate) } } } });
   }
   if (market && market.trim()) {
     and.push({ market: { equals: market.trim(), mode: "insensitive" } });
@@ -34,17 +35,30 @@ function buildCustomerWhere(opts: ListCustomersOptions): Prisma.CustomerWhereInp
   return and.length ? { AND: and } : {};
 }
 
-export function listCustomers(opts: ListCustomersOptions = {}) {
-  return prisma.customer.findMany({
+const customerInclude = {
+  templateLinks: { include: { template: { select: { id: true, name: true } } } },
+} satisfies Prisma.CustomerInclude;
+
+type CustomerWithLinks = Prisma.CustomerGetPayload<{ include: typeof customerInclude }>;
+
+// Đổi templateLinks -> mảng `templates` cho gọn phía FE.
+function shapeCustomer(c: CustomerWithLinks) {
+  const { templateLinks, ...rest } = c;
+  return { ...rest, templates: templateLinks.map((l) => l.template) };
+}
+
+export async function listCustomers(opts: ListCustomersOptions = {}) {
+  const rows = await prisma.customer.findMany({
     where: buildCustomerWhere(opts),
     orderBy: { name: "asc" },
-    include: { template: { select: { id: true, name: true } } },
+    include: customerInclude,
   });
+  return rows.map(shapeCustomer);
 }
 
 export type ListCustomersPagedOptions = ListCustomersOptions & { page?: number; limit?: number };
 
-// Danh sách khách có PHÂN TRANG (cho trang quản lý khách của template — hợp khi có hàng nghìn khách).
+// Danh sách khách có PHÂN TRANG (cho trang quản lý khách của template).
 export async function listCustomersPaged(opts: ListCustomersPagedOptions = {}) {
   const where = buildCustomerWhere(opts);
   const page = Math.max(1, Math.trunc(opts.page ?? 1));
@@ -53,13 +67,13 @@ export async function listCustomersPaged(opts: ListCustomersPagedOptions = {}) {
     prisma.customer.findMany({
       where,
       orderBy: { name: "asc" },
-      include: { template: { select: { id: true, name: true } } },
+      include: customerInclude,
       skip: (page - 1) * limit,
       take: limit,
     }),
     prisma.customer.count({ where }),
   ]);
-  return { items, total, page, limit };
+  return { items: items.map(shapeCustomer), total, page, limit };
 }
 
 // Danh sách quốc gia (market) khác nhau — dùng cho dropdown lọc.
@@ -74,9 +88,9 @@ export async function listCustomerMarkets(): Promise<string[]> {
 }
 
 export function createCustomer(input: CreateCustomerInput) {
+  const templateId = input.templateId;
   return prisma.customer.create({
     data: {
-      templateId: input.templateId ? BigInt(input.templateId) : null,
       name: input.name,
       phone: input.phone ?? null,
       whatsappPhone: input.whatsappPhone ?? input.phone ?? null,
@@ -84,14 +98,15 @@ export function createCustomer(input: CreateCustomerInput) {
       market: input.market ?? null,
       status: input.status ?? "ACTIVE",
       receiveQuotation: input.receiveQuotation ?? true,
+      // Nếu có templateId -> tạo luôn link N-N.
+      ...(templateId ? { templateLinks: { create: { templateId: BigInt(templateId) } } } : {}),
     },
   });
 }
 
-// PATCH: chuyển template (templateId số/null) hoặc sửa thông tin.
+// PATCH: chỉ sửa thông tin khách (gán/gỡ template chuyển sang API link riêng).
 export function updateCustomer(id: string, input: PatchCustomerInput) {
   const data: Record<string, unknown> = {};
-  if ("templateId" in input) data.templateId = input.templateId == null ? null : BigInt(input.templateId);
   if (input.name !== undefined) data.name = input.name;
   if (input.whatsappPhone !== undefined) data.whatsappPhone = input.whatsappPhone;
   if (input.phone !== undefined) data.phone = input.phone;
@@ -103,6 +118,24 @@ export function updateCustomer(id: string, input: PatchCustomerInput) {
 }
 
 export async function deleteCustomer(id: string) {
-  await prisma.customer.delete({ where: { id: BigInt(id) } });
+  await prisma.customer.delete({ where: { id: BigInt(id) } }); // cascade xoá link
+  return { ok: true };
+}
+
+// ---- Quản lý liên kết N-N template <-> customer ----
+export async function addCustomerToTemplate(templateId: string, customerId: string) {
+  const key = { templateId: BigInt(templateId), customerId: BigInt(customerId) };
+  await prisma.templateCustomer.upsert({
+    where: { templateId_customerId: key },
+    create: key,
+    update: {},
+  });
+  return { ok: true };
+}
+
+export async function removeCustomerFromTemplate(templateId: string, customerId: string) {
+  await prisma.templateCustomer.deleteMany({
+    where: { templateId: BigInt(templateId), customerId: BigInt(customerId) },
+  });
   return { ok: true };
 }
