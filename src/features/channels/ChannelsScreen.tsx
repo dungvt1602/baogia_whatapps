@@ -50,7 +50,9 @@ export default function ChannelsScreen() {
   const load = useCallback(async () => {
     try { setRows(await getJSON<Channel[]>("/api/channels")); } catch (e) { setErr((e as Error).message); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    (async () => { await load(); })();
+  }, [load]);
 
   const view = useMemo(() => {
     const kw = q.trim().toLowerCase();
@@ -68,7 +70,7 @@ export default function ChannelsScreen() {
   const paged = view.slice((curPage - 1) * 15, curPage * 15);
   const allChecked = paged.length > 0 && paged.every((c) => selected.has(c.id));
   function toggleAll() { const s = new Set(selected); if (allChecked) paged.forEach((c) => s.delete(c.id)); else paged.forEach((c) => s.add(c.id)); setSelected(s); }
-  function toggleOne(id: string) { const s = new Set(selected); s.has(id) ? s.delete(id) : s.add(id); setSelected(s); }
+  function toggleOne(id: string) { const s = new Set(selected); if (s.has(id)) s.delete(id); else s.add(id); setSelected(s); }
   function onSort(key: SortKey) { setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" })); }
   const arrow = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
 

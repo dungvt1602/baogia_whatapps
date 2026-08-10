@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
@@ -121,10 +120,18 @@ export default function QuotesScreen() {
     catch (e) { setErr((e as Error).message); }
   }
 
-  useEffect(() => { if (!selQ) loadList(); }, [selQ, loadList]);
   useEffect(() => {
-    if (!selQ) { setDetail(null); return; }
-    setErr(""); setDetail(null); loadDetail(selQ);
+    if (selQ) return;
+    (async () => { await loadList(); })();
+  }, [selQ, loadList]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!selQ) { if (!cancelled) setDetail(null); return; }
+      if (!cancelled) { setErr(""); setDetail(null); }
+      await loadDetail(selQ);
+    })();
+    return () => { cancelled = true; };
   }, [selQ, loadDetail]);
 
   const errBox = err ? <div style={sx("background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px")}>{err}</div> : null;

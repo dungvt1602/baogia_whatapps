@@ -42,7 +42,9 @@ export default function LogsScreen() {
   const load = useCallback(async () => {
     try { setRows(await getJSON<Log[]>("/api/activity")); } catch (e) { setErr((e as Error).message); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    (async () => { await load(); })();
+  }, [load]);
 
   const view = useMemo(() => {
     const kw = q.trim().toLowerCase();

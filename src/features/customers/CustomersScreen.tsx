@@ -50,10 +50,25 @@ export default function CustomersScreen() {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
 
+  const [market, setMarket] = useState("");            // lọc theo quốc gia (server-side)
+  const [markets, setMarkets] = useState<string[]>([]); // danh sách quốc gia cho dropdown
+
   const load = useCallback(async () => {
-    try { setRows(await getJSON<Customer[]>("/api/customers")); } catch (e) { setErr((e as Error).message); }
+    try {
+      const qs = market ? `?market=${encodeURIComponent(market)}` : "";
+      setRows(await getJSON<Customer[]>(`/api/customers${qs}`));
+    } catch (e) { setErr((e as Error).message); }
+  }, [market]);
+  useEffect(() => {
+    (async () => { await load(); })();
+  }, [load]);
+
+  // Tải danh sách quốc gia (1 lần) cho dropdown lọc.
+  useEffect(() => {
+    (async () => {
+      try { setMarkets(await getJSON<string[]>("/api/customers/markets")); } catch { /* bỏ qua */ }
+    })();
   }, []);
-  useEffect(() => { load(); }, [load]);
 
   const view = useMemo(() => {
     const kw = q.trim().toLowerCase();
@@ -72,7 +87,7 @@ export default function CustomersScreen() {
 
   const allChecked = paged.length > 0 && paged.every((c) => selected.has(c.id));
   function toggleAll() { const s = new Set(selected); if (allChecked) paged.forEach((c) => s.delete(c.id)); else paged.forEach((c) => s.add(c.id)); setSelected(s); }
-  function toggleOne(id: string) { const s = new Set(selected); s.has(id) ? s.delete(id) : s.add(id); setSelected(s); }
+  function toggleOne(id: string) { const s = new Set(selected); if (s.has(id)) s.delete(id); else s.add(id); setSelected(s); }
   function onSort(key: SortKey) { setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" })); }
   const arrow = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
 
@@ -126,6 +141,10 @@ export default function CustomersScreen() {
           <span style={sx("position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; color:#9AA7A0")}>🔍</span>
           <HInput s={`${inp} height:34px; padding-left:32px`} focus={focus} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Tìm tên, SĐT, email..." />
         </div>
+        <select value={market} onChange={(e) => { setMarket(e.target.value); setPage(1); }} style={sx(`${inp} height:34px; width:190px; padding:0 8px`)} title="Lọc theo quốc gia">
+          <option value="">🌏 Tất cả quốc gia</option>
+          {markets.map((mk) => <option key={mk} value={mk}>{mk}</option>)}
+        </select>
         <div style={sx("font-size:12.5px; color:#7B8A80")}>{view.length} khách hàng{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
         <HButton s={`${ghost} ${selected.size ? "" : "opacity:.5; pointer-events:none"}; border-color:#E4C7C5; color:#B3261E`} onClick={delSelected}>🗑 Xóa đã chọn</HButton>

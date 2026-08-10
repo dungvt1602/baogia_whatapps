@@ -22,7 +22,7 @@ export async function getDashboardStats() {
       take: 5,
       include: { _count: { select: { templates: true } } },
     }),
-    prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 8 }),
+    prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
     prisma.sendBatch.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
 
