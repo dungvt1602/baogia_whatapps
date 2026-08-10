@@ -13,7 +13,7 @@ type Customer = {
   market: string | null;
   status: string;
   receiveQuotation: boolean;
-  template: { id: string; name: string } | null;
+  templates: { id: string; name: string }[];
 };
 type Form = { id?: string; name: string; whatsappPhone: string; phone: string; email: string; market: string; status: string; receiveQuotation: boolean };
 type SortKey = "name" | "whatsappPhone" | "phone" | "email" | "market" | "status";
@@ -120,7 +120,7 @@ export default function CustomersScreen() {
   function exportCsv() {
     const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const head = ["TEN_KHACH", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "TEMPLATE"];
-    const data = view.map((c) => [c.name, c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.template?.name || "Kho"]);
+    const data = view.map((c) => [c.name, c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.templates.map((t) => t.name).join("; ") || "Kho"]);
     const csv = [head, ...data].map((r) => r.map(cell).join(",")).join("\r\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
@@ -191,7 +191,7 @@ export default function CustomersScreen() {
                   <td style={sx(gtd + "; text-align:center")}>
                     <span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:${c.receiveQuotation ? "#E7F5EC" : "#F1F4F1"}; color:${c.receiveQuotation ? "#1F7440" : "#8B9A90"}`)}>{c.receiveQuotation ? "Có" : "Không"}</span>
                   </td>
-                  <td style={sx(gtd + "; color:#7B8A80")} title={c.template?.name || "Kho"}>{c.template?.name || <span style={sx("color:#9AA7A0")}>Kho</span>}</td>
+                  <td style={sx(gtd + "; color:#7B8A80")} title={c.templates.map((t) => t.name).join(", ") || "Kho"}>{c.templates.length ? c.templates.map((t) => t.name).join(", ") : <span style={sx("color:#9AA7A0")}>Kho</span>}</td>
                   <td style={sx(gtd + "; text-align:center")}>
                     <div style={sx("display:flex; gap:6px; justify-content:center")}>
                       <HButton s="border:1px solid #DCE3DC; border-radius:6px; background:#fff; color:#33475B; font-size:12px; font-weight:600; cursor:pointer; padding:0 9px; height:28px" onClick={() => openEdit(c)}>Sửa</HButton>
@@ -269,7 +269,7 @@ export default function CustomersScreen() {
         const rows: [string, React.ReactNode][] = [
           ["Tên khách", detail.name], ["Số WhatsApp", detail.whatsappPhone || "—"], ["SĐT khác", detail.phone || "—"],
           ["Email", detail.email || "—"], ["Thị trường", detail.market || "—"], ["Trạng thái", detail.status],
-          ["Nhận báo giá", detail.receiveQuotation ? "Có" : "Không"], ["Template", detail.template?.name || "Kho"],
+          ["Nhận báo giá", detail.receiveQuotation ? "Có" : "Không"], ["Template", detail.templates.map((t) => t.name).join(", ") || "Kho"],
         ];
         return (
           <div style={sx("position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px")}>

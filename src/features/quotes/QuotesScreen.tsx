@@ -16,12 +16,12 @@ type Q = {
   _count: { templates: number };
 };
 type Item = { id: string; no: number; product: string; packing: string | null; unit: string | null; quantity: unknown; price: unknown };
-type Tpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customers: number } };
+type Tpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customerLinks: number } };
 type QDetail = Q & { validUntil: string | null; issuedDate: string | null; items: Item[]; templates: Tpl[] };
 
 type EditItem = { product: string; packing: string; unit: string; quantity: string; price: string };
 type CatalogProduct = { id: string; code: string; name: string; unit: string | null; giaFinal: unknown; currency: string };
-type PoolTpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customers: number } };
+type PoolTpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customerLinks: number } };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
 const inp = "height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
@@ -276,7 +276,7 @@ export default function QuotesScreen() {
                 <span style={sx("font-size:17px")}>{t.icon || "📄"}</span>
                 <div style={sx("min-width:0; flex:1")}>
                   <div style={sx("font-size:13.5px; font-weight:600; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.name}</div>
-                  <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel?.type || "chưa gắn kênh"}</div>
+                  <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customerLinks} khách · {t.channel?.type || "chưa gắn kênh"}</div>
                 </div>
               </div>
               <HButton s="width:32px; height:34px; border:1px solid #E4C7C5; border-radius:9px; background:#fff; color:#B3261E; cursor:pointer; flex-shrink:0" title="Gỡ khỏi báo giá (về kho)" onClick={() => setDetach_({ id: t.id, name: t.name })}>×</HButton>
@@ -350,7 +350,7 @@ export default function QuotesScreen() {
                   <span style={sx("font-size:18px")}>{t.icon || "📄"}</span>
                   <div style={sx("min-width:0; flex:1")}>
                     <div style={sx("font-size:13.5px; font-weight:600; color:#14261A")}>{t.name}</div>
-                    <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel?.type || "chưa gắn kênh"}</div>
+                    <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customerLinks} khách · {t.channel?.type || "chưa gắn kênh"}</div>
                   </div>
                   <span style={sx("font-size:12.5px; font-weight:600; color:#1F7440; background:#EAF3EC; border-radius:8px; padding:5px 11px; flex-shrink:0")}>+ Gắn</span>
                 </button>

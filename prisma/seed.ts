@@ -88,13 +88,16 @@ async function main() {
     },
   });
 
-  // 7) Template -> nhiều Khách hàng (có whatsapp/status/receiveQuotation)
-  await prisma.customer.createMany({
+  // 7) Template -> nhiều Khách hàng (N-N qua bảng nối template_customers)
+  const linked = await prisma.customer.createManyAndReturn({
     data: [
-      { templateId: template.id, name: "Fresh Orient GmbH", whatsappPhone: "84901234001", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
-      { templateId: template.id, name: "Al Rawabi Trading", whatsappPhone: "84901234002", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
-      { templateId: template.id, name: "Golden Basket Ltd.", whatsappPhone: "84901234003", market: "INDIA", status: "INACTIVE", receiveQuotation: true },
+      { name: "Fresh Orient GmbH", whatsappPhone: "84901234001", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
+      { name: "Al Rawabi Trading", whatsappPhone: "84901234002", market: "INDIA", status: "ACTIVE", receiveQuotation: true },
+      { name: "Golden Basket Ltd.", whatsappPhone: "84901234003", market: "INDIA", status: "INACTIVE", receiveQuotation: true },
     ],
+  });
+  await prisma.templateCustomer.createMany({
+    data: linked.map((c) => ({ templateId: template.id, customerId: c.id })),
   });
 
   // 8) Khách trong KHO (templateId null) — để popup "Thêm khách" có ứng viên kéo-thả
@@ -132,7 +135,7 @@ async function main() {
     })),
   });
 
-  const custCount = await prisma.customer.count({ where: { templateId: template.id } });
+  const custCount = await prisma.templateCustomer.count({ where: { templateId: template.id } });
 
   console.log("Seed xong:", {
     admin: admin.username,

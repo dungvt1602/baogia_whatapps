@@ -8,7 +8,7 @@ export function listTemplates() {
     include: {
       quotation: { select: { id: true, code: true, title: true } },
       channel: { select: { id: true, name: true, type: true } },
-      _count: { select: { customers: true } },
+      _count: { select: { customerLinks: true } },
     },
   });
 }
@@ -22,7 +22,7 @@ export function getTemplateDetail(id: string) {
       },
       channel: { select: { id: true, name: true, type: true, accountId: true } },
       image: { select: { mime: true, updatedAt: true } }, // chỉ lấy metadata, KHÔNG lấy bytes
-      _count: { select: { customers: true } },
+      _count: { select: { customerLinks: true } },
     },
   });
 }
@@ -52,7 +52,7 @@ export function listTemplatesByQuotation(quotationId: string) {
     orderBy: { createdAt: "asc" },
     include: {
       channel: { select: { id: true, name: true, type: true } },
-      _count: { select: { customers: true } },
+      _count: { select: { customerLinks: true } },
     },
   });
 }
@@ -96,16 +96,18 @@ export function listPoolTemplates() {
     orderBy: { createdAt: "desc" },
     include: {
       channel: { select: { id: true, name: true, type: true } },
-      _count: { select: { customers: true } },
+      _count: { select: { customerLinks: true } },
     },
   });
 }
 
-export function listTemplateCustomers(templateId: string) {
-  return prisma.customer.findMany({
+export async function listTemplateCustomers(templateId: string) {
+  const links = await prisma.templateCustomer.findMany({
     where: { templateId: BigInt(templateId) },
     orderBy: { createdAt: "asc" },
+    include: { customer: true },
   });
+  return links.map((l) => l.customer);
 }
 
 export function updateTemplate(id: string, input: UpdateTemplateInput) {
@@ -122,11 +124,11 @@ export function updateTemplate(id: string, input: UpdateTemplateInput) {
   return prisma.template.update({ where: { id: BigInt(id) }, data });
 }
 
-// Xóa template: đưa khách về kho, xóa lệnh gửi liên quan (cascade jobs) rồi xóa template.
+// Xóa template: xóa lệnh gửi liên quan rồi xóa template.
+// Link N-N (template_customers) tự bị xoá theo (onDelete: Cascade) — khách hàng giữ nguyên.
 export async function deleteTemplate(id: string) {
   const tid = BigInt(id);
   await prisma.$transaction([
-    prisma.customer.updateMany({ where: { templateId: tid }, data: { templateId: null } }),
     prisma.quotationTemplateSend.deleteMany({ where: { templateId: tid } }),
     prisma.sendBatch.deleteMany({ where: { templateId: tid } }),
     prisma.template.delete({ where: { id: tid } }),

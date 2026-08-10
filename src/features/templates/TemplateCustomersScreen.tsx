@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, postJSON, patchJSON } from "@/components/common/api";
+import { getJSON, postJSON, sendJSON } from "@/components/common/api";
 
 type CustRow = {
   id: string;
@@ -14,7 +14,7 @@ type CustRow = {
   market: string | null;
   status: string;
   receiveQuotation: boolean;
-  template: { id: string; name: string } | null;
+  templates: { id: string; name: string }[];
 };
 type Paged = { items: CustRow[]; total: number; page: number; limit: number };
 
@@ -69,22 +69,28 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
-  const inThis = (r: CustRow) => r.template?.id === templateId;
+  const inThis = (r: CustRow) => r.templates.some((t) => t.id === templateId);
 
   const allChecked = items.length > 0 && items.every((r) => selected.has(r.id));
   function toggleAll() { const s = new Set(selected); if (allChecked) items.forEach((r) => s.delete(r.id)); else items.forEach((r) => s.add(r.id)); setSelected(s); }
   function toggleOne(id: string) { const s = new Set(selected); if (s.has(id)) s.delete(id); else s.add(id); setSelected(s); }
 
-  const assign = useCallback(async (ids: string[], toTemplate: string | null) => {
+  const assign = useCallback(async (ids: string[], action: "add" | "remove") => {
     if (!ids.length) return;
     setErr(""); setBusy(true);
     try {
-      await Promise.all(ids.map((id) => patchJSON(`/api/customers/${id}`, { templateId: toTemplate })));
+      await Promise.all(
+        ids.map((id) =>
+          action === "add"
+            ? postJSON(`/api/templates/${templateId}/customers/${id}`)
+            : sendJSON("DELETE", `/api/templates/${templateId}/customers/${id}`),
+        ),
+      );
       setSelected(new Set());
       await load();
     } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
-  }, [load]);
+  }, [load, templateId]);
 
   const selectedRows = items.filter((r) => selected.has(r.id));
   const selInThis = selectedRows.filter(inThis).length;   // đang trong template này
@@ -129,8 +135,8 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
         <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:10px; background:#EAF3EC; border:1px solid #CFE6D5; border-radius:10px; padding:8px 12px; flex-wrap:wrap")}>
           <span style={sx("font-size:13px; color:#1F7440; font-weight:600")}>Đã chọn {selected.size}</span>
           <div style={sx("flex:1")} />
-          <HButton s={`${green} ${selOthers ? "" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selectedRows.filter((r) => !inThis(r)).map((r) => r.id), templateId)}>➕ Thêm {selOthers || ""} vào template</HButton>
-          <HButton s={`${ghost} ${selInThis ? "border-color:#E4C7C5; color:#B3261E" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selectedRows.filter(inThis).map((r) => r.id), null)}>➖ Gỡ {selInThis || ""} khỏi template</HButton>
+          <HButton s={`${green} ${selOthers ? "" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selectedRows.filter((r) => !inThis(r)).map((r) => r.id), "add")}>➕ Thêm {selOthers || ""} vào template</HButton>
+          <HButton s={`${ghost} ${selInThis ? "border-color:#E4C7C5; color:#B3261E" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selectedRows.filter(inThis).map((r) => r.id), "remove")}>➖ Gỡ {selInThis || ""} khỏi template</HButton>
           <HButton s={ghost} onClick={() => setSelected(new Set())}>Bỏ chọn</HButton>
         </div>
       )}
@@ -163,17 +169,17 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
                   <td style={sx(gtd)}>
                     {here ? (
                       <span style={sx("font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:#E7F5EC; color:#1F7440")}>Trong template này</span>
-                    ) : c.template ? (
-                      <span style={sx("font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:#FBF3E3; color:#B7791F")} title={c.template.name}>Ở: {c.template.name}</span>
+                    ) : c.templates.length ? (
+                      <span style={sx("font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:#FBF3E3; color:#B7791F")} title={c.templates.map((t) => t.name).join(", ")}>Ở {c.templates.length} template khác</span>
                     ) : (
                       <span style={sx("font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:#F1F4F1; color:#8B9A90")}>Trong kho</span>
                     )}
                   </td>
                   <td style={sx(gtd + "; text-align:center")}>
                     {here ? (
-                      <HButton s="border:1px solid #E4C7C5; border-radius:6px; background:#fff; color:#B3261E; font-size:12px; font-weight:600; cursor:pointer; padding:0 12px; height:28px" onClick={() => assign([c.id], null)}>Gỡ</HButton>
+                      <HButton s="border:1px solid #E4C7C5; border-radius:6px; background:#fff; color:#B3261E; font-size:12px; font-weight:600; cursor:pointer; padding:0 12px; height:28px" onClick={() => assign([c.id], "remove")}>Gỡ</HButton>
                     ) : (
-                      <HButton s="border:none; border-radius:6px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:12px; font-weight:600; cursor:pointer; padding:0 14px; height:28px" onClick={() => assign([c.id], templateId)}>Thêm</HButton>
+                      <HButton s="border:none; border-radius:6px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:12px; font-weight:600; cursor:pointer; padding:0 14px; height:28px" onClick={() => assign([c.id], "add")}>Thêm</HButton>
                     )}
                   </td>
                 </tr>

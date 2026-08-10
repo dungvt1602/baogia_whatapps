@@ -70,13 +70,13 @@ export async function previewSend(params: {
     include: {
       quotation: { include: { items: { orderBy: { no: "asc" } } } },
       channel: true,
-      customers: true,
+      customerLinks: { include: { customer: true } },
     },
   });
   if (!template) throw new Error("Không tìm thấy template.");
   if (!template.quotation) throw new Error("Template chưa gắn với báo giá nào.");
 
-  const recipients = eligible(template.customers);
+  const recipients = eligible(template.customerLinks.map((l) => l.customer));
   if (recipients.length === 0) {
     throw new Error(
       "Không có khách ACTIVE + nhận báo giá cho template này. (điều kiện: STATUS=ACTIVE, receiveQuotation=true)",
@@ -157,7 +157,7 @@ export async function confirmSend(params: {
         include: {
           quotation: { include: { items: { orderBy: { no: "asc" } } } },
           channel: true,
-          customers: true,
+          customerLinks: { include: { customer: true } },
         },
       },
     },
@@ -168,7 +168,7 @@ export async function confirmSend(params: {
   }
   if (!batch.template.quotation) throw new Error("Template chưa gắn báo giá.");
 
-  const recipients = eligible(batch.template.customers);
+  const recipients = eligible(batch.template.customerLinks.map((l) => l.customer));
   if (recipients.length === 0) throw new Error("Không có khách hợp lệ để gửi.");
 
   const channel = batch.channel || batch.template.channel;

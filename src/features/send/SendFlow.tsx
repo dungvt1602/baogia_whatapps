@@ -6,7 +6,7 @@ import { sx, HButton } from "@/components/common/ui";
 
 // ---- kiểu dữ liệu trả về từ API (BigInt -> string) ----
 type Quotation = { id: string; code: string; title: string | null; status: string; market: string | null; totalAmount: unknown; currency: string; _count: { templates: number } };
-type Template = { id: string; name: string; icon: string | null; body: string | null; waTemplateName: string | null; channel: { id: string; name: string; type: string } | null; _count: { customers: number } };
+type Template = { id: string; name: string; icon: string | null; body: string | null; waTemplateName: string | null; channel: { id: string; name: string; type: string } | null; _count: { customerLinks: number } };
 type Recipient = { id: string; name: string; phone: string };
 type PItem = { no: number; product: string; packing: string | null; unit: string | null; quantity: unknown; price: unknown };
 type Preview = {
@@ -243,7 +243,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
                 <div style={sx("width:38px; height:38px; border-radius:11px; background:#F1F5F1; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0")}>{t.icon || "📄"}</div>
                 <div style={sx("min-width:0; flex:1")}>
                   <div style={sx("font-size:14px; font-weight:600; color:#14261A")}>{t.name}</div>
-                  <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customers} khách · {t.channel ? t.channel.type : "chưa gắn kênh"}{t.waTemplateName ? ` · ${t.waTemplateName}` : ""}</div>
+                  <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customerLinks} khách · {t.channel ? t.channel.type : "chưa gắn kênh"}{t.waTemplateName ? ` · ${t.waTemplateName}` : ""}</div>
                 </div>
                 <span style={sx("color:#B9C5BC; font-size:18px")}>›</span>
               </div>
