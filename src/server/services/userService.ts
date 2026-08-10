@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/server/db/prisma";
+import { hashPassword } from "@/server/lib/password";
 import type { CreateUserInput, UpdateUserInput } from "@/server/validation/user.schema";
 
 export function listUsers() {
@@ -24,24 +25,26 @@ export function findUserForLogin(identifier: string) {
   });
 }
 
-export function createUser(input: CreateUserInput) {
+export async function createUser(input: CreateUserInput) {
+  const passwordHash = input.password ? await hashPassword(input.password) : "SET_BY_ADMIN";
   return prisma.user.create({
     data: {
       username: input.username,
       email: input.email,
-      passwordHash: input.passwordHash ?? "SET_BY_ADMIN",
+      passwordHash,
       fullName: input.fullName ?? null,
       ...(input.isActive != null ? { isActive: input.isActive } : {}),
     },
   });
 }
 
-export function updateUser(id: string, input: UpdateUserInput) {
+export async function updateUser(id: string, input: UpdateUserInput) {
   const data: Record<string, unknown> = {};
   if (input.username !== undefined) data.username = input.username;
   if (input.email !== undefined) data.email = input.email;
   if (input.fullName !== undefined) data.fullName = input.fullName;
   if (input.isActive !== undefined) data.isActive = input.isActive;
+  if (input.password) data.passwordHash = await hashPassword(input.password); // trống = giữ nguyên
   return prisma.user.update({ where: { id: BigInt(id) }, data });
 }
 

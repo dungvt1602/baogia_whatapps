@@ -14,7 +14,7 @@ type User = {
   createdAt: string;
   userRoles: Role[];
 };
-type Form = { id?: string; username: string; email: string; fullName: string; isActive: boolean };
+type Form = { id?: string; username: string; email: string; fullName: string; password: string; isActive: boolean };
 type SortKey = "username" | "fullName" | "email";
 
 const inp = "height:40px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
@@ -26,7 +26,7 @@ const gth = "padding:7px 10px; font-size:11.5px; font-weight:700; color:#33475B;
 const gtd = "padding:6px 10px; font-size:12.5px; color:#1B2A20; border:1px solid #E4EAEF; white-space:nowrap; background:inherit";
 const fmtDate = (s: string) => new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(s));
 const roleNames = (u: User) => u.userRoles.map((r) => r.role.name).join(", ") || "—";
-const empty = (): Form => ({ username: "", email: "", fullName: "", isActive: true });
+const empty = (): Form => ({ username: "", email: "", fullName: "", password: "", isActive: true });
 
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string }) {
   return (
@@ -77,7 +77,7 @@ export default function UsersScreen() {
   function onSort(key: SortKey) { setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" })); }
   const arrow = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
 
-  function openEdit(u: User) { setForm({ id: u.id, username: u.username, email: u.email, fullName: u.fullName || "", isActive: u.isActive }); }
+  function openEdit(u: User) { setForm({ id: u.id, username: u.username, email: u.email, fullName: u.fullName || "", password: "", isActive: u.isActive }); }
   async function save() {
     if (!form?.username) return setErr("Nhập username");
     if (!form?.email) return setErr("Nhập email");
@@ -183,6 +183,10 @@ export default function UsersScreen() {
               <div style={sx("flex:1")}><Field label="Họ tên" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} placeholder="Nguyễn Ngọc Anh" /></div>
             </div>
             <Field label="Email *" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="ngoc.anh@agogroup.vn" />
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
+              <span style={sx(lbl)}>{form.id ? "Đổi mật khẩu (để trống nếu giữ nguyên)" : "Mật khẩu đăng nhập"}</span>
+              <HInput s={inp} focus={focus} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={form.id ? "••••••" : "Đặt mật khẩu cho user"} />
+            </label>
             <label style={sx("display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer; font-size:13.5px; color:#3C4A40")}>
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} style={sx("cursor:pointer; width:16px; height:16px")} />
               Đang hoạt động

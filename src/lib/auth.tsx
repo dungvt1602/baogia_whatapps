@@ -49,14 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, []);
 
-  const login: AuthCtx["login"] = async (identifier) => {
+  const login: AuthCtx["login"] = async (identifier, password) => {
     const id = (identifier || "").trim();
     if (!id) return { ok: false, error: "Vui lòng nhập tài khoản." };
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier: id }),
+        body: JSON.stringify({ identifier: id, password: password ?? "" }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return { ok: false, error: data?.error || `Đăng nhập lỗi (${res.status})` };

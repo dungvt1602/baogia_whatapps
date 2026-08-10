@@ -27,8 +27,9 @@ export default function Login() {
 
   async function doLogin() {
     if (!email.trim()) return setLoginError("Vui lòng nhập tài khoản (username hoặc email).");
+    if (!password) return setLoginError("Vui lòng nhập mật khẩu.");
     setLoginError(""); setBusy(true);
-    const r = await login(email.trim());
+    const r = await login(email.trim(), password);
     setBusy(false);
     if (r.ok) router.push("/tong-quan");
     else setLoginError(r.error || "Đăng nhập thất bại.");
@@ -43,7 +44,7 @@ export default function Login() {
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, email: reg.email, fullName: reg.name }),
+        body: JSON.stringify({ username, email: reg.email, fullName: reg.name, password: reg.pass }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Đăng ký lỗi");
