@@ -66,6 +66,9 @@ export function useAgo() {
   const patchFn = (fn: (s: AgoState) => Partial<AgoState>) =>
     setSt((s) => ({ ...s, ...fn(s) }));
 
+  // Trạng thái thu gọn sidebar (desktop).
+  const [collapsed, setCollapsed] = useState(false);
+
   const router = useRouter();
   const pathname = usePathname();
   const { session, logout: authLogout } = useAuth();
@@ -80,7 +83,6 @@ export function useAgo() {
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Điều hướng = đổi URL.
@@ -107,17 +109,17 @@ export function useAgo() {
     `border:none; border-radius:8px; padding:7px 14px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; background:${on ? "#fff" : "transparent"}; color:${on ? "#14261A" : "#7B8A80"}; box-shadow:${on ? "0 1px 3px rgba(0,0,0,.09)" : "none"}`;
 
   const navDef = [
-    { key: "dash", label: "Tổng quan", icon: "◈", badge: "" },
-    { key: "quotes", label: "Báo giá", icon: "▤", badge: "6" },
-    { key: "customers", label: "Khách hàng", icon: "◎", badge: "" },
-    { key: "products", label: "Sản phẩm", icon: "🍎", badge: "" },
-    { key: "tpl", label: "Template", icon: "❖", badge: "" },
-    { key: "send", label: "Gửi báo giá", icon: "📤", badge: "" },
+    { key: "dash", label: "Tổng quan", icon: "◈" },
+    { key: "quotes", label: "Báo giá", icon: "▤" },
+    { key: "customers", label: "Khách hàng", icon: "◎" },
+    { key: "products", label: "Sản phẩm", icon: "🍎" },
+    { key: "tpl", label: "Template", icon: "❖" },
+    { key: "send", label: "Gửi báo giá", icon: "📤" },
     ...(isAdmin
       ? [
-          { key: "team", label: "Người dùng", icon: "☖", badge: st.pending.length ? String(st.pending.length) : "" },
-          { key: "channels", label: "Kênh gửi", icon: "⇄", badge: "" },
-          { key: "logs", label: "Nhật ký", icon: "≡", badge: "" },
+          { key: "team", label: "Người dùng", icon: "☖" },
+          { key: "channels", label: "Kênh gửi", icon: "⇄" },
+          { key: "logs", label: "Nhật ký", icon: "≡" },
         ]
       : []),
   ];
@@ -163,18 +165,23 @@ export function useAgo() {
     // ---- shell ----
     sidebarStyle: narrow
       ? `position:fixed; top:0; left:0; bottom:0; width:266px; z-index:50; background:linear-gradient(175deg,#17452A 0%,#0E2A19 100%); padding:22px 14px; display:flex; flex-direction:column; transform:translateX(${st.navOpen ? "0" : "-105%"}); transition:transform .26s cubic-bezier(.4,0,.2,1); box-shadow:${st.navOpen ? "0 20px 50px -20px rgba(0,0,0,.5)" : "none"}`
-      : "width:256px; flex-shrink:0; background:linear-gradient(175deg,#17452A 0%,#0E2A19 100%); padding:22px 14px; display:flex; flex-direction:column; position:sticky; top:0; height:100vh",
+      : `width:${collapsed ? "0" : "256px"}; flex-shrink:0; background:linear-gradient(175deg,#17452A 0%,#0E2A19 100%); padding:22px ${collapsed ? "0" : "14px"}; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow:hidden; transition:width .26s cubic-bezier(.4,0,.2,1), padding .26s`,
     navOverlay: narrow && st.navOpen,
     openNav: () => patch({ navOpen: true }),
     closeNav: () => patch({ navOpen: false }),
     closeNavStyle: narrow ? "border:none; background:#F1F4F1; border-radius:8px; width:28px; height:28px; cursor:pointer; color:#4A5A4E; font-size:12px" : "display:none",
     burgerStyle: narrow ? "border:1px solid #E1E7E1; background:#fff; border-radius:10px; width:40px; height:40px; cursor:pointer; font-size:15px; color:#3C4A40; flex-shrink:0" : "display:none",
+    // Nút thu gọn / mở rộng sidebar ở GIỮA cạnh phải (chỉ desktop).
+    collapsed,
+    toggleCollapse: () => setCollapsed((c) => !c),
+    collapseBtnStyle: narrow
+      ? "display:none"
+      : `position:fixed; top:50%; left:${collapsed ? "8px" : "242px"}; transform:translateY(-50%); z-index:55; width:26px; height:46px; border-radius:9px; border:1px solid rgba(255,255,255,.2); background:linear-gradient(175deg,#17452A,#0E2A19); color:#fff; font-size:15px; cursor:pointer; box-shadow:0 6px 16px -6px rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; transition:left .26s cubic-bezier(.4,0,.2,1)`,
     navItems: navDef.map((n) => {
       const on = active === n.key;
       return {
         label: n.label,
         icon: n.icon,
-        badge: n.badge,
         go: () => go(n.key),
         style: `display:flex; align-items:center; gap:11px; width:100%; text-align:left; border:none; border-radius:11px; padding:11px 12px; font-size:14px; font-weight:${on ? "600" : "500"}; cursor:pointer; transition:background .15s, color .15s; background:${on ? "rgba(255,255,255,.14)" : "transparent"}; color:${on ? "#fff" : "rgba(255,255,255,.62)"}; box-shadow:${on ? "inset 0 0 0 1px rgba(255,255,255,.14)" : "none"}`,
         hoverStyle: on ? "" : "background:rgba(255,255,255,.07); color:#fff",

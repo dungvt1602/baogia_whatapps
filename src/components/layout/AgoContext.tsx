@@ -6,7 +6,7 @@ import { useAgo, type Ctx } from "@/components/layout/useAgo";
 const AgoCtx = createContext<Ctx | null>(null);
 
 // Chạy useAgo() 1 lần ở layout, cung cấp cho toàn bộ màn con qua context.
-export function AgoProvider({ children }: { children: React.ReactNode }) {
+export function   AgoProvider({ children }: { children: React.ReactNode }) {
   const v = useAgo();
   return <AgoCtx.Provider value={v}>{children}</AgoCtx.Provider>;
 }

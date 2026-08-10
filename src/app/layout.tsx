@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   applicationName: "Ago Báo giá",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Ago Báo giá" },
-  icons: { icon: "/icon.svg", shortcut: "/icon.svg", apple: "/icon.svg" },
+  icons: { icon: "/logo-agofruit.svg", shortcut: "/logo-agofruit.svg", apple: "/logo-agofruit.svg" },
 };
 
 export const viewport: Viewport = {

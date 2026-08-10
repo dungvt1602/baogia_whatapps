@@ -37,7 +37,9 @@ export default function DashboardScreen() {
   const load = useCallback(async () => {
     try { setS(await getJSON<Stats>("/api/dashboard")); } catch (e) { setErr((e as Error).message); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    (async () => { await load(); })();
+  }, [load]);
 
   const kpis = s ? [
     { label: "Báo giá", icon: "📄", value: s.counts.quotations, sub: money(s.quotationTotal), to: "/bao-gia" },

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 
 export type Session = {
   id?: string;
@@ -22,6 +22,54 @@ type AuthCtx = {
   logout: () => void;
 };
 
+// ---- Store ngoài (localStorage) đọc qua useSyncExternalStore ----
+// Không setState trong effect (rule react-hooks/set-state-in-effect) và an toàn SSR:
+// server + lần hydrate đầu dùng snapshot mặc định, sau đó mới đọc localStorage thật.
+const listeners = new Set<() => void>();
+
+let cachedRaw: string | null = null;
+let cachedSession: Session = null;
+let cacheReady = false;
+
+function getSessionSnapshot(): Session {
+  // getSnapshot phải trả reference ỔN ĐỊNH khi dữ liệu không đổi -> memo theo chuỗi raw
+  // (nếu parse mới mỗi lần sẽ gây vòng lặp render vô hạn).
+  const raw = localStorage.getItem(KEY);
+  if (!cacheReady || raw !== cachedRaw) {
+    cachedRaw = raw;
+    try {
+      cachedSession = raw ? (JSON.parse(raw) as Session) : null;
+    } catch {
+      cachedSession = null;
+    }
+    cacheReady = true;
+  }
+  return cachedSession;
+}
+
+function subscribe(onChange: () => void): () => void {
+  listeners.add(onChange);
+  // Đồng bộ khi tab khác đăng nhập/đăng xuất.
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === KEY) emit();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function emit() {
+  for (const fn of listeners) fn();
+}
+
+function writeSession(s: Session) {
+  if (s) localStorage.setItem(KEY, JSON.stringify(s));
+  else localStorage.removeItem(KEY);
+  emit(); // báo cho tab hiện tại (storage event chỉ bắn sang tab khác)
+}
+
 const Ctx = createContext<AuthCtx>({
   session: null,
   ready: false,
@@ -36,18 +84,10 @@ function initials(name: string): string {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session>(null);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setSession(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-    setReady(true);
-  }, []);
+  // SSR + hydrate đầu: session=null, ready=false (khớp server, tránh mismatch).
+  // Sau hydrate: đọc localStorage thật, ready=true.
+  const session = useSyncExternalStore(subscribe, getSessionSnapshot, () => null);
+  const ready = useSyncExternalStore(subscribe, () => true, () => false);
 
   const login: AuthCtx["login"] = async (identifier, password) => {
     const id = (identifier || "").trim();
@@ -69,8 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userInitials: initials(name),
         role: data.isAdmin ? "admin" : "staff",
       };
-      localStorage.setItem(KEY, JSON.stringify(s));
-      setSession(s);
+      writeSession(s);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
@@ -78,8 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem(KEY);
-    setSession(null);
+    writeSession(null);
   };
 
   return <Ctx.Provider value={{ session, ready, login, logout }}>{children}</Ctx.Provider>;
