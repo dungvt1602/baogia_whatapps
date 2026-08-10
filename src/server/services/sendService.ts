@@ -249,7 +249,7 @@ export async function processNextBatch() {
   // Upload ảnh upload của template lên WhatsApp 1 lần/lệnh (chỉ khi gửi thật + có ảnh).
   if (useWaTemplate && includeImage && !mediaId && !dryRun && tplImage) {
     try {
-      const token = channel?.apiKeyEnv ? process.env[channel.apiKeyEnv] : undefined;
+      const token = process.env[channel?.apiKeyEnv || "WHATSAPP_TOKEN_MAIN"];
       const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || channel?.accountId || "";
       if (token && phoneNumberId) {
         const bytes = new Uint8Array(tplImage.data).buffer;

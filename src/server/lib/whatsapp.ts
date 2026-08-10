@@ -97,7 +97,8 @@ export async function sendQuotationMessage(input: SendInput): Promise<{ messageI
   if (isDryRun()) return { messageId: dryId() };
 
   const type = (input.channelType || "").toUpperCase();
-  const token = input.apiKeyEnv ? process.env[input.apiKeyEnv] : undefined;
+  // Không gắn kênh -> mặc định lấy token từ WHATSAPP_TOKEN_MAIN.
+  const token = process.env[input.apiKeyEnv || "WHATSAPP_TOKEN_MAIN"];
 
   if (type === "WHATSAPP") {
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || input.accountId || "";
