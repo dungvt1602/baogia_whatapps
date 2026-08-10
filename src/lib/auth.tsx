@@ -2,18 +2,32 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 
-export type Session = { userName: string; userInitials: string; role: "admin" | "staff" } | null;
+export type Session = {
+  id?: string;
+  username?: string;
+  email?: string;
+  userName: string;
+  userInitials: string;
+  role: "admin" | "staff";
+} | null;
 
 const KEY = "ago_session";
+
+type LoginResult = { ok: boolean; error?: string };
 
 type AuthCtx = {
   session: Session;
   ready: boolean;
-  login: (email: string, password: string, regName?: string) => boolean;
+  login: (identifier: string, password?: string) => Promise<LoginResult>;
   logout: () => void;
 };
 
-const Ctx = createContext<AuthCtx>({ session: null, ready: false, login: () => false, logout: () => {} });
+const Ctx = createContext<AuthCtx>({
+  session: null,
+  ready: false,
+  login: async () => ({ ok: false }),
+  logout: () => {},
+});
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -35,15 +49,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, []);
 
-  const login: AuthCtx["login"] = (email, password, regName) => {
-    if (!email || !password) return false;
-    const local = email.toLowerCase().split("@")[0];
-    const isAdm = local.includes("admin") || local.includes("giam.doc");
-    const name = regName || (isAdm ? "Trần Quốc Bảo" : "Lê Ngọc Anh");
-    const s: Session = { userName: name, userInitials: initials(name), role: isAdm ? "admin" : "staff" };
-    localStorage.setItem(KEY, JSON.stringify(s));
-    setSession(s);
-    return true;
+  const login: AuthCtx["login"] = async (identifier) => {
+    const id = (identifier || "").trim();
+    if (!id) return { ok: false, error: "Vui lòng nhập tài khoản." };
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ identifier: id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: data?.error || `Đăng nhập lỗi (${res.status})` };
+      const name: string = data.fullName || data.username || id;
+      const s: Session = {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        userName: name,
+        userInitials: initials(name),
+        role: data.isAdmin ? "admin" : "staff",
+      };
+      localStorage.setItem(KEY, JSON.stringify(s));
+      setSession(s);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
   };
 
   const logout = () => {

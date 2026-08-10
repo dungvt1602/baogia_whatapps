@@ -9,6 +9,21 @@ export function listUsers() {
   });
 }
 
+// Đăng nhập đơn giản: tra theo username HOẶC email, phải đang hoạt động.
+export function findUserForLogin(identifier: string) {
+  const id = identifier.trim();
+  return prisma.user.findFirst({
+    where: {
+      isActive: true,
+      OR: [
+        { username: { equals: id, mode: "insensitive" } },
+        { email: { equals: id, mode: "insensitive" } },
+      ],
+    },
+    include: { userRoles: { include: { role: true } } },
+  });
+}
+
 export function createUser(input: CreateUserInput) {
   return prisma.user.create({
     data: {

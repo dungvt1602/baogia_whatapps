@@ -15,25 +15,44 @@ export default function Login() {
   const router = useRouter();
   const { login } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("ngoc.anh@agogroup.vn");
-  const [password, setPassword] = useState("••••••••");
+  const [email, setEmail] = useState("admin@agoexim.com");
+  const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [remember, setRemember] = useState(true);
-  const [loginError, setLoginError] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [reg, setReg] = useState({ name: "", email: "", pass: "", pass2: "" });
   const [regError, setRegError] = useState("");
   const [regDone, setRegDone] = useState(false);
 
-  function doLogin() {
-    if (!email || !password) return setLoginError(true);
-    const name = regDone && reg.name ? reg.name : undefined;
-    if (login(email, password, name)) router.push("/tong-quan");
+  async function doLogin() {
+    if (!email.trim()) return setLoginError("Vui lòng nhập tài khoản (username hoặc email).");
+    setLoginError(""); setBusy(true);
+    const r = await login(email.trim());
+    setBusy(false);
+    if (r.ok) router.push("/tong-quan");
+    else setLoginError(r.error || "Đăng nhập thất bại.");
   }
-  function doRegister() {
+  async function doRegister() {
     if (!reg.name || !reg.email || !reg.pass) return (setRegError("Vui lòng điền đầy đủ thông tin."), setRegDone(false));
     if (reg.pass.length < 8) return (setRegError("Mật khẩu tối thiểu 8 ký tự."), setRegDone(false));
     if (reg.pass !== reg.pass2) return (setRegError("Mật khẩu nhập lại không khớp."), setRegDone(false));
-    setRegError(""); setRegDone(true); setEmail(reg.email); setPassword(reg.pass); setMode("login");
+    setRegError(""); setBusy(true);
+    try {
+      const username = reg.email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "") || reg.email;
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, email: reg.email, fullName: reg.name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Đăng ký lỗi");
+      setRegDone(true); setEmail(reg.email); setMode("login");
+    } catch (e) {
+      setRegError((e as Error).message); setRegDone(false);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -61,8 +80,8 @@ export default function Login() {
               <HInput className="glass-inp" type={showPass ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mật khẩu" s={inp} />
               <HButton s="border:none; background:none; color:rgba(255,255,255,.75); cursor:pointer; padding:0 14px; font-size:15px" onClick={() => setShowPass(!showPass)}>{showPass ? "🙈" : "👁"}</HButton>
             </div>
-            {loginError && <div style={sx("background:rgba(120,20,16,.45); border:1px solid rgba(255,255,255,.18); color:#FFD9D6; border-radius:10px; padding:10px 13px; font-size:13px")}>Vui lòng nhập email và mật khẩu.</div>}
-            <HButton s={yellowBtn} h="filter:brightness(1.06); transform:translateY(-1px)" onClick={doLogin}>Đăng nhập</HButton>
+            {loginError && <div style={sx("background:rgba(120,20,16,.45); border:1px solid rgba(255,255,255,.18); color:#FFD9D6; border-radius:10px; padding:10px 13px; font-size:13px")}>{loginError}</div>}
+            <HButton s={`${yellowBtn}; opacity:${busy ? ".7" : "1"}`} h="filter:brightness(1.06); transform:translateY(-1px)" onClick={doLogin}>{busy ? "Đang vào..." : "Đăng nhập"}</HButton>
             <div style={sx("display:flex; align-items:center; justify-content:space-between; margin-top:2px")}>
               <label style={sx("display:flex; align-items:center; gap:8px; color:rgba(255,255,255,.85); font-size:12.5px; cursor:pointer")}>
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={sx("width:15px; height:15px; accent-color:#2F8F4E; cursor:pointer")} />
@@ -82,8 +101,8 @@ export default function Login() {
             <div style={sx(field)}><span style={sx(icon)}>🔒</span><HInput className="glass-inp" type="password" value={reg.pass2} onChange={(e) => setReg({ ...reg, pass2: e.target.value })} placeholder="Nhập lại mật khẩu" s={inp} /></div>
             {regError && <div style={sx("background:rgba(120,20,16,.45); border:1px solid rgba(255,255,255,.18); color:#FFD9D6; border-radius:10px; padding:10px 13px; font-size:13px")}>{regError}</div>}
             {regDone && <div style={sx("background:rgba(20,90,48,.55); border:1px solid rgba(255,255,255,.22); color:#D8F7E3; border-radius:10px; padding:10px 13px; font-size:13px; font-weight:600")}>Đăng ký thành công! Bạn có thể đăng nhập ngay.</div>}
-            <HButton s={yellowBtn} h="filter:brightness(1.06); transform:translateY(-1px)" onClick={doRegister}>Tạo tài khoản</HButton>
-            <div style={sx("text-align:center; margin-top:10px; font-size:13.5px; color:rgba(255,255,255,.85)")}>Đã có tài khoản? <a href="#" onClick={(e) => { e.preventDefault(); setMode("login"); setLoginError(false); }} style={sx("font-weight:700; color:#fff")}>Đăng nhập</a></div>
+            <HButton s={`${yellowBtn}; opacity:${busy ? ".7" : "1"}`} h="filter:brightness(1.06); transform:translateY(-1px)" onClick={doRegister}>{busy ? "Đang tạo..." : "Tạo tài khoản"}</HButton>
+            <div style={sx("text-align:center; margin-top:10px; font-size:13.5px; color:rgba(255,255,255,.85)")}>Đã có tài khoản? <a href="#" onClick={(e) => { e.preventDefault(); setMode("login"); setLoginError(""); }} style={sx("font-weight:700; color:#fff")}>Đăng nhập</a></div>
           </div>
         )}
       </div>
