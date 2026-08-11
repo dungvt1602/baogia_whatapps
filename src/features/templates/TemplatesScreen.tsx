@@ -10,6 +10,7 @@ import {
   patchJSON,
   sendJSON,
 } from "@/components/common/api";
+import { toast } from "sonner";
 
 type Tpl = {
   id: string;
@@ -223,8 +224,9 @@ export default function TemplatesScreen() {
     try {
       await sendJSON("DELETE", `/api/templates/${selT}/customers/${customerId}`);
       await refresh();
+      toast.success("Đã gỡ khách khỏi template");
     } catch (e) {
-      setErr((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 
@@ -260,10 +262,10 @@ export default function TemplatesScreen() {
     });
   }
   async function saveForm() {
-    if (!form?.name) return setErr("Nhập tên hiển thị");
+    if (!form?.name) return toast.error("Nhập tên hiển thị");
     if (!form?.waTemplateName)
-      return setErr("Nhập tên template Meta (đã duyệt trên WhatsApp Manager)");
-    setErr("");
+      return toast.error("Nhập tên template Meta (đã duyệt trên WhatsApp Manager)");
+    const editing = !!form.id;
     const body = {
       name: form.name,
       icon: form.icon,
@@ -283,8 +285,9 @@ export default function TemplatesScreen() {
       }
       setForm(null);
       await loadTemplates();
+      toast.success(editing ? "Đã cập nhật template" : "Đã tạo template");
     } catch (e) {
-      setErr((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
   async function doDelete() {
@@ -295,8 +298,9 @@ export default function TemplatesScreen() {
       setDelT(null);
       await loadTemplates();
       router.push("/template");
+      toast.success("Đã xóa template");
     } catch (e) {
-      setErr((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 
@@ -365,7 +369,7 @@ export default function TemplatesScreen() {
       />
       <div
         style={sx(
-          "position:relative; width:100%; max-width:500px; max-height:88vh; overflow:auto; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)",
+          "position:relative; width:100%; max-width:520px; max-height:92vh; overflow:auto; background:#fff; border-radius:20px; padding:22px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)",
         )}
       >
         <div
@@ -387,13 +391,11 @@ export default function TemplatesScreen() {
         </div>
         <div
           style={sx(
-            "font-size:12px; color:#7B8A80; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:10px; padding:10px 12px; margin-bottom:14px; line-height:1.5",
+            "font-size:11.5px; color:#7B8A80; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:9px; padding:8px 11px; margin-bottom:12px; line-height:1.45",
           )}
         >
-          Template WhatsApp phải được{" "}
-          <b>tạo & duyệt trên WhatsApp Manager (Meta)</b> trước. Ở đây chỉ khai{" "}
-          <b>thông tin template Meta</b> — nội dung & biến do Meta quy định,
-          không sửa ở app.
+          Template phải được <b>duyệt trên WhatsApp Manager (Meta)</b> trước. Ở
+          đây chỉ khai <b>thông tin template Meta</b>.
         </div>
         <div style={sx("display:flex; gap:10px")}>
           <div style={sx("width:90px")}>
@@ -453,15 +455,26 @@ export default function TemplatesScreen() {
               )}
             >
               <span style={sx(lbl)}>Ngôn ngữ</span>
-              <HInput
-                s={inp}
-                focus={focus}
+              <select
                 value={form.waLanguage}
                 onChange={(e) =>
                   setForm({ ...form, waLanguage: e.target.value })
                 }
-                placeholder="vi"
-              />
+                style={sx(inp)}
+              >
+                {/* Giữ lại giá trị hiện tại nếu không nằm trong danh sách chuẩn */}
+                {form.waLanguage &&
+                  !["vi", "en", "en_US", "ja", "ko", "zh_CN", "hi"].includes(form.waLanguage) && (
+                    <option value={form.waLanguage}>{form.waLanguage}</option>
+                  )}
+                <option value="vi">vi — Tiếng Việt</option>
+                <option value="en">en — English</option>
+                <option value="en_US">en_US — English (US)</option>
+                <option value="ja">ja — 日本語</option>
+                <option value="ko">ko — 한국어</option>
+                <option value="zh_CN">zh_CN — 中文</option>
+                <option value="hi">hi — हिन्दी</option>
+              </select>
             </label>
           </div>
           <div style={sx("flex:1")}>
@@ -511,7 +524,7 @@ export default function TemplatesScreen() {
           <HTextarea
             s="border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:10px 11px; font-size:13.5px; line-height:1.5; color:#14261A; outline:none; resize:vertical; font-family:inherit; width:100%;"
             focus={focus}
-            rows={4}
+            rows={3}
             value={form.body}
             onChange={(e) => setForm({ ...form, body: e.target.value })}
             placeholder="Kính gửi {{1}}, ... (copy đúng nội dung template trên Meta)"

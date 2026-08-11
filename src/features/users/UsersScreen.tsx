@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sx, HButton, HInput } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
+import { toast } from "sonner";
 
 type Role = { role: { name: string; code: string } };
 type User = {
@@ -81,22 +82,23 @@ export default function UsersScreen() {
 
   function openEdit(u: User) { setForm({ id: u.id, username: u.username, email: u.email, fullName: u.fullName || "", password: "", isActive: u.isActive }); }
   async function save() {
-    if (!form?.username) return setErr("Nhập username");
-    if (!form?.email) return setErr("Nhập email");
-    setErr("");
+    if (!form?.username) return toast.error("Nhập username");
+    if (!form?.email) return toast.error("Nhập email");
+    const editing = !!form.id;
     try {
       if (form.id) await patchJSON(`/api/users/${form.id}`, form);
       else await postJSON("/api/users", form);
       setForm(null); await load();
-    } catch (e) { setErr((e as Error).message); }
+      toast.success(editing ? "Đã cập nhật người dùng" : "Đã thêm người dùng");
+    } catch (e) { toast.error((e as Error).message); }
   }
-  function del(u: User) { setPending({ text: `Xóa người dùng "${u.username}"?`, run: async () => { await sendJSON("DELETE", `/api/users/${u.id}`); await load(); } }); }
+  function del(u: User) { setPending({ text: `Xóa người dùng "${u.username}"?`, run: async () => { await sendJSON("DELETE", `/api/users/${u.id}`); await load(); toast.success("Đã xóa người dùng"); } }); }
   function delSelected() {
     if (selected.size === 0) return;
     const ids = [...selected];
-    setPending({ text: `Xóa ${ids.length} người dùng đã chọn?`, run: async () => { await Promise.all(ids.map((id) => sendJSON("DELETE", `/api/users/${id}`))); setSelected(new Set()); await load(); } });
+    setPending({ text: `Xóa ${ids.length} người dùng đã chọn?`, run: async () => { await Promise.all(ids.map((id) => sendJSON("DELETE", `/api/users/${id}`))); setSelected(new Set()); await load(); toast.success(`Đã xóa ${ids.length} người dùng`); } });
   }
-  async function runPending() { if (!pending) return; setErr(""); try { await pending.run(); setPending(null); } catch (e) { setErr((e as Error).message); setPending(null); } }
+  async function runPending() { if (!pending) return; setErr(""); try { await pending.run(); setPending(null); } catch (e) { toast.error((e as Error).message); setPending(null); } }
   function exportCsv() {
     const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const head = ["USERNAME", "HO_TEN", "EMAIL", "VAI_TRO", "TRANG_THAI"];

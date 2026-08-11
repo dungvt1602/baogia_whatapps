@@ -76,6 +76,7 @@ type InputProps = {
   type?: string;
   className?: string;
   checked?: boolean;
+  list?: string; // id của <datalist> để gợi ý giá trị (vẫn cho gõ mới)
 };
 
 // Input có focus style (thay cho style-focus).

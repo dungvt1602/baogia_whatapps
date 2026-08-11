@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sx, HButton, HInput } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
+import { toast } from "sonner";
 
 type Product = {
   id: string;
@@ -99,28 +100,29 @@ export default function ProductsScreen() {
     });
   }
   async function save() {
-    if (!form?.code) return setErr("Nhập mã sản phẩm (MA_SP)");
-    if (!form?.name) return setErr("Nhập tên sản phẩm (TEN_SP)");
-    setErr("");
+    if (!form?.code) return toast.error("Nhập mã sản phẩm (MA_SP)");
+    if (!form?.name) return toast.error("Nhập tên sản phẩm (TEN_SP)");
+    const editing = !!form.id;
     try {
       if (form.id) await patchJSON(`/api/products/${form.id}`, form);
       else await postJSON("/api/products", form);
       setForm(null); await load();
-    } catch (e) { setErr((e as Error).message); }
+      toast.success(editing ? "Đã cập nhật sản phẩm" : "Đã thêm sản phẩm");
+    } catch (e) { toast.error((e as Error).message); }
   }
   function del(p: Product) {
-    setPending({ text: `Xóa sản phẩm "${p.name}" (${p.code})?`, run: async () => { await sendJSON("DELETE", `/api/products/${p.id}`); await load(); } });
+    setPending({ text: `Xóa sản phẩm "${p.name}" (${p.code})?`, run: async () => { await sendJSON("DELETE", `/api/products/${p.id}`); await load(); toast.success("Đã xóa sản phẩm"); } });
   }
   function delSelected() {
     if (selected.size === 0) return;
     const ids = [...selected];
-    setPending({ text: `Xóa ${ids.length} sản phẩm đã chọn?`, run: async () => { await Promise.all(ids.map((id) => sendJSON("DELETE", `/api/products/${id}`))); setSelected(new Set()); await load(); } });
+    setPending({ text: `Xóa ${ids.length} sản phẩm đã chọn?`, run: async () => { await Promise.all(ids.map((id) => sendJSON("DELETE", `/api/products/${id}`))); setSelected(new Set()); await load(); toast.success(`Đã xóa ${ids.length} sản phẩm`); } });
   }
   async function runPending() {
     if (!pending) return;
     setErr("");
     try { await pending.run(); setPending(null); }
-    catch (e) { setErr((e as Error).message); setPending(null); }
+    catch (e) { toast.error((e as Error).message); setPending(null); }
   }
   function exportCsv() {
     const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };

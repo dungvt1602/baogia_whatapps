@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/auth";
 import RegisterSW from "@/components/common/RegisterSW";
 
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full">
         <RegisterSW />
         <AuthProvider>{children}</AuthProvider>
+        <Toaster position="top-right" richColors closeButton toastOptions={{ style: { fontFamily: "var(--font-be-vietnam)" } }} />
       </body>
     </html>
   );
