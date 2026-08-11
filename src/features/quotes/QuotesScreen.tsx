@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
 import { getJSON, putJSON, patchJSON, sendJSON } from "@/components/common/api";
+import { toast } from "sonner";
 
 type Q = {
   id: string;
@@ -93,7 +94,8 @@ export default function QuotesScreen() {
       await putJSON(`/api/quotations/${selQ}/items`, { items });
       setEditItems(null);
       await loadDetail(selQ);
-    } catch (e) { setErr((e as Error).message); }
+      toast.success("Đã lưu sản phẩm báo giá");
+    } catch (e) { toast.error((e as Error).message); }
   }
 
   // ---- Gắn/gỡ template (tạo & sửa nội dung ở menu Template) ----
@@ -104,20 +106,20 @@ export default function QuotesScreen() {
   async function attachTpl(id: string) {
     if (!selQ) return;
     setErr("");
-    try { await patchJSON(`/api/templates/${id}`, { quotationId: selQ }); setPicker(false); await loadDetail(selQ); }
-    catch (e) { setErr((e as Error).message); }
+    try { await patchJSON(`/api/templates/${id}`, { quotationId: selQ }); setPicker(false); await loadDetail(selQ); toast.success("Đã gắn template"); }
+    catch (e) { toast.error((e as Error).message); }
   }
   async function doDetach() {
     if (!detach_) return;
     setErr("");
-    try { await patchJSON(`/api/templates/${detach_.id}`, { quotationId: null }); setDetach_(null); await loadDetail(selQ); }
-    catch (e) { setErr((e as Error).message); }
+    try { await patchJSON(`/api/templates/${detach_.id}`, { quotationId: null }); setDetach_(null); await loadDetail(selQ); toast.success("Đã gỡ template về kho"); }
+    catch (e) { toast.error((e as Error).message); }
   }
   async function doDelQ() {
     if (!delQ) return;
     setErr("");
-    try { await sendJSON("DELETE", `/api/quotations/${delQ.id}`); setDelQ(null); await loadList(); }
-    catch (e) { setErr((e as Error).message); }
+    try { await sendJSON("DELETE", `/api/quotations/${delQ.id}`); setDelQ(null); await loadList(); toast.success("Đã xóa báo giá"); }
+    catch (e) { toast.error((e as Error).message); }
   }
 
   useEffect(() => {

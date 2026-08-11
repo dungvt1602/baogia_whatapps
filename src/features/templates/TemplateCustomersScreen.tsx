@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
 import { getJSON, postJSON, sendJSON } from "@/components/common/api";
+import { toast } from "sonner";
+import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
+import { applyDial, findCountry } from "@/components/common/countries";
 
 type CustRow = {
   id: string;
@@ -88,7 +91,8 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
       );
       setSelected(new Set());
       await load();
-    } catch (e) { setErr((e as Error).message); }
+      toast.success(action === "add" ? `Đã thêm ${ids.length} khách vào template` : `Đã gỡ ${ids.length} khách khỏi template`);
+    } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(false); }
   }, [load, templateId]);
 
@@ -97,13 +101,15 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
   const selOthers = selectedRows.length - selInThis;      // chưa vào template này (kho / template khác)
 
   async function createNew() {
-    if (!newC?.name.trim()) { setErr("Nhập tên khách"); return; }
+    if (!newC?.name.trim()) { toast.error("Nhập tên khách"); return; }
+    if (!newC.whatsappPhone.trim()) { toast.error("Nhập số WhatsApp"); return; }
     setErr(""); setBusy(true);
     try {
       await postJSON(`/api/templates/${templateId}/customers`, { name: newC.name.trim(), whatsappPhone: newC.whatsappPhone.trim(), market: newC.market.trim() || null });
       setNewC(null);
       await load();
-    } catch (e) { setErr((e as Error).message); }
+      toast.success("Đã thêm khách mới vào template");
+    } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(false); }
   }
 
@@ -206,10 +212,10 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
             </div>
             <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}><span style={sx(lbl)}>Tên khách *</span>
               <HInput s={inp} focus={focus} value={newC.name} onChange={(e) => setNewC({ ...newC, name: e.target.value })} placeholder="Fresh Orient Co." /></label>
-            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}><span style={sx(lbl)}>Số WhatsApp</span>
-              <HInput s={inp} focus={focus} value={newC.whatsappPhone} onChange={(e) => setNewC({ ...newC, whatsappPhone: e.target.value })} placeholder="84901234001" /></label>
-            <label style={sx("display:flex; flex-direction:column; margin-bottom:16px")}><span style={sx(lbl)}>Quốc gia</span>
-              <HInput s={inp} focus={focus} value={newC.market} onChange={(e) => setNewC({ ...newC, market: e.target.value })} placeholder="INDIA" /></label>
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}><span style={sx(lbl)}>Quốc gia</span>
+              <CountrySelect value={newC.market} onSelect={(c) => setNewC({ ...newC, market: c.name, whatsappPhone: applyDial(newC.whatsappPhone, c.dial) })} /></label>
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:16px")}><span style={sx(lbl)}>Số WhatsApp *</span>
+              <PhoneWithDial dial={findCountry(newC.market)?.dial ?? ""} value={newC.whatsappPhone} onChange={(v) => setNewC({ ...newC, whatsappPhone: v })} placeholder="901234001" /></label>
             <div style={sx("display:flex; gap:10px")}>
               <HButton s={`${green} flex:1; height:44px`} onClick={createNew}>Tạo & thêm vào template</HButton>
               <HButton s={`${ghost} height:44px`} onClick={() => setNewC(null)}>Hủy</HButton>

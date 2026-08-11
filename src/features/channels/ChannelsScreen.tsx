@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sx, HButton, HInput } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
+import { toast } from "sonner";
 
 type Channel = {
   id: string;
@@ -76,23 +77,24 @@ export default function ChannelsScreen() {
 
   function openEdit(c: Channel) { setForm({ id: c.id, name: c.name, type: c.type, accountId: c.accountId, apiKeyEnv: c.apiKeyEnv, note: c.note || "", isActive: c.isActive }); }
   async function save() {
-    if (!form?.name) return setErr("Nhập tên kênh");
-    if (!form?.accountId) return setErr("Nhập account id");
-    if (!form?.apiKeyEnv) return setErr("Nhập tên biến env chứa API key");
-    setErr("");
+    if (!form?.name) return toast.error("Nhập tên kênh");
+    if (!form?.accountId) return toast.error("Nhập account id");
+    if (!form?.apiKeyEnv) return toast.error("Nhập tên biến env chứa API key");
+    const editing = !!form.id;
     try {
       if (form.id) await patchJSON(`/api/channels/${form.id}`, form);
       else await postJSON("/api/channels", form);
       setForm(null); await load();
-    } catch (e) { setErr((e as Error).message); }
+      toast.success(editing ? "Đã cập nhật kênh" : "Đã thêm kênh");
+    } catch (e) { toast.error((e as Error).message); }
   }
-  function del(c: Channel) { setPending({ text: `Xóa kênh "${c.name}"?`, run: async () => { await sendJSON("DELETE", `/api/channels/${c.id}`); await load(); } }); }
+  function del(c: Channel) { setPending({ text: `Xóa kênh "${c.name}"?`, run: async () => { await sendJSON("DELETE", `/api/channels/${c.id}`); await load(); toast.success("Đã xóa kênh"); } }); }
   function delSelected() {
     if (selected.size === 0) return;
     const ids = [...selected];
-    setPending({ text: `Xóa ${ids.length} kênh đã chọn?`, run: async () => { await Promise.all(ids.map((id) => sendJSON("DELETE", `/api/channels/${id}`))); setSelected(new Set()); await load(); } });
+    setPending({ text: `Xóa ${ids.length} kênh đã chọn?`, run: async () => { await Promise.all(ids.map((id) => sendJSON("DELETE", `/api/channels/${id}`))); setSelected(new Set()); await load(); toast.success(`Đã xóa ${ids.length} kênh`); } });
   }
-  async function runPending() { if (!pending) return; setErr(""); try { await pending.run(); setPending(null); } catch (e) { setErr((e as Error).message); setPending(null); } }
+  async function runPending() { if (!pending) return; setErr(""); try { await pending.run(); setPending(null); } catch (e) { toast.error((e as Error).message); setPending(null); } }
   function exportCsv() {
     const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const head = ["TEN_KENH", "LOAI", "ACCOUNT_ID", "API_KEY_ENV", "TRANG_THAI", "GHI_CHU"];
