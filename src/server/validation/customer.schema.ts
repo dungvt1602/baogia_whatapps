@@ -22,6 +22,7 @@ const requiredPhone = z
 
 export const createCustomerSchema = z.object({
   name: z.string().trim().min(1, "Vui lòng nhập tên khách").max(255, "Tên quá dài"),
+  company: z.string().max(255).nullish(),
   phone: phoneField("SĐT khác"),
   whatsappPhone: requiredPhone,
   email: emailField,
@@ -35,6 +36,7 @@ export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 // PATCH: chỉ sửa thông tin khách (gán/gỡ template dùng API link riêng).
 export const patchCustomerSchema = z.object({
   name: z.string().trim().min(1, "Vui lòng nhập tên khách").max(255, "Tên quá dài"),
+  company: z.string().max(255).nullish(),
   phone: phoneField("SĐT khác"),
   whatsappPhone: requiredPhone,
   email: emailField,

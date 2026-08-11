@@ -110,9 +110,7 @@ export function useAgo() {
 
   const navDef = [
     { key: "dash", label: "Tổng quan", icon: "◈" },
-    { key: "quotes", label: "Báo giá", icon: "▤" },
     { key: "customers", label: "Khách hàng", icon: "◎" },
-    { key: "products", label: "Sản phẩm", icon: "🍎" },
     { key: "tpl", label: "Template", icon: "❖" },
     { key: "send", label: "Gửi báo giá", icon: "📤" },
     ...(isAdmin
@@ -135,8 +133,8 @@ export function useAgo() {
     channels: ["Kênh gửi báo giá", "Kết nối WhatsApp, Zalo và Telegram"],
     logs: ["Nhật ký hoạt động", "Toàn bộ thao tác trên hệ thống"],
     new: ["Tạo báo giá", "Điền thông tin và gửi ngay qua kênh chat"],
-    tpl: ["Quản lý template", "Mỗi báo giá có bộ template riêng để gửi khách"],
-    send: ["Gửi báo giá", "Chọn báo giá và template để gửi cho khách hàng"],
+    tpl: ["Quản lý template", "Mỗi template gắn 1 bảng giá và danh sách khách nhận"],
+    send: ["Gửi báo giá", "Chọn template và gửi cho khách hàng của nó"],
     products: ["Sản phẩm", "Kho sản phẩm dùng chung — chỉnh giá & thông tin"],
   };
 

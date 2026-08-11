@@ -21,7 +21,6 @@ type Tpl = { id: string; name: string; icon: string | null; channel: { type: str
 type QDetail = Q & { validUntil: string | null; issuedDate: string | null; items: Item[]; templates: Tpl[] };
 
 type EditItem = { product: string; packing: string; unit: string; quantity: string; price: string };
-type CatalogProduct = { id: string; code: string; name: string; unit: string | null; giaFinal: unknown; currency: string };
 type PoolTpl = { id: string; name: string; icon: string | null; channel: { type: string } | null; _count: { customerLinks: number } };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
@@ -55,7 +54,6 @@ export default function QuotesScreen() {
   const [quotations, setQuotations] = useState<Q[]>([]);
   const [detail, setDetail] = useState<QDetail | null>(null);
   const [editItems, setEditItems] = useState<EditItem[] | null>(null); // đang sửa sản phẩm
-  const [catalog, setCatalog] = useState<CatalogProduct[]>([]); // kho sản phẩm để chọn nhanh
   const [picker, setPicker] = useState(false); // đang mở picker chọn template từ kho
   const [poolTpls, setPoolTpls] = useState<PoolTpl[]>([]); // template trong kho (chưa gắn báo giá)
   const [detach_, setDetach_] = useState<{ id: string; name: string } | null>(null); // xác nhận gỡ template về kho
@@ -78,13 +76,6 @@ export default function QuotesScreen() {
         ? rows.map((r) => ({ product: r.product, packing: r.packing || "", unit: r.unit || "", quantity: String(num(r.quantity)), price: String(num(r.price)) }))
         : [{ product: "", packing: "", unit: "", quantity: "1", price: "0" }],
     );
-    getJSON<CatalogProduct[]>("/api/products").then(setCatalog).catch(() => {});
-  }
-  // Thêm 1 dòng điền sẵn từ kho sản phẩm
-  function addFromCatalog(id: string) {
-    const p = catalog.find((x) => x.id === id);
-    if (!p || !editItems) return;
-    setEditItems([...editItems, { product: p.name, packing: "", unit: p.unit || "", quantity: "1", price: String(num(p.giaFinal)) }]);
   }
   async function saveEditor() {
     if (!selQ || !editItems) return;
@@ -295,16 +286,6 @@ export default function QuotesScreen() {
             <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:14px")}>
               <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Sản phẩm — {detail?.code}</div>
               <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setEditItems(null)}>✕</HButton>
-            </div>
-
-            <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:12px; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:11px; padding:10px 12px")}>
-              <span style={sx("font-size:12.5px; font-weight:600; color:#3C4A40; flex-shrink:0")}>Thêm từ kho:</span>
-              <select value="" onChange={(e) => { addFromCatalog(e.target.value); e.target.value = ""; }} style={sx(`${inp} flex:1`)}>
-                <option value="">— chọn sản phẩm để điền sẵn —</option>
-                {catalog.filter((p) => p.giaFinal != null && p.giaFinal !== "").map((p) => (
-                  <option key={p.id} value={p.id}>{p.code} · {p.name} · {money(p.giaFinal, p.currency)}{p.unit ? `/${p.unit}` : ""}</option>
-                ))}
-              </select>
             </div>
 
             <div style={sx("display:flex; flex-direction:column; gap:8px")}>

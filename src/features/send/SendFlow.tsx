@@ -5,8 +5,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { sx, HButton } from "@/components/common/ui";
 
 // ---- kiểu dữ liệu trả về từ API (BigInt -> string) ----
-type Quotation = { id: string; code: string; title: string | null; status: string; market: string | null; totalAmount: unknown; currency: string; _count: { templates: number } };
-type Template = { id: string; name: string; icon: string | null; body: string | null; waTemplateName: string | null; channel: { id: string; name: string; type: string } | null; _count: { customerLinks: number } };
+type Template = {
+  id: string;
+  name: string;
+  icon: string | null;
+  waTemplateName: string | null;
+  quotation: { id: string; code: string; title: string | null } | null;
+  channel: { id: string; name: string; type: string } | null;
+  _count: { customerLinks: number };
+};
 type Recipient = { id: string; name: string; phone: string };
 type PItem = { no: number; product: string; packing: string | null; unit: string | null; quantity: unknown; price: unknown };
 type Preview = {
@@ -44,7 +51,7 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-const STEPS = ["Chọn báo giá", "Chọn template", "Danh sách gửi", "Điền ảnh & gửi"];
+const STEPS = ["Chọn template", "Danh sách gửi", "Điền ảnh & gửi"];
 function Stepper({ step, maxStep, onGo }: { step: number; maxStep: number; onGo: (n: number) => void }) {
   return (
     <div style={sx("display:flex; align-items:center; gap:6px; margin-bottom:16px; flex-wrap:wrap")}>
@@ -72,13 +79,10 @@ function Stepper({ step, maxStep, onGo }: { step: number; maxStep: number; onGo:
 export default function SendFlow({ actorName }: { actorName?: string }) {
   const [step, setStep] = useState(1);
   const [maxStep, setMaxStep] = useState(1);
-  const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [qErr, setQErr] = useState("");
-  const [loadingQ, setLoadingQ] = useState(true);
 
-  const [selQ, setSelQ] = useState<Quotation | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [loadingT, setLoadingT] = useState(false);
+  const [loadingT, setLoadingT] = useState(true);
+  const [tErr, setTErr] = useState("");
   const [selTpl, setSelTpl] = useState<Template | null>(null);
 
   const [imgKey, setImgKey] = useState(0);
@@ -95,28 +99,21 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   const [batch, setBatch] = useState<Batch | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Tải danh sách template ngay từ đầu (đã bỏ bước chọn báo giá).
   useEffect(() => {
-    getJSON<Quotation[]>("/api/quotations").then(setQuotations).catch((e) => setQErr(e.message)).finally(() => setLoadingQ(false));
+    getJSON<Template[]>("/api/templates").then(setTemplates).catch((e) => setTErr(e.message)).finally(() => setLoadingT(false));
   }, []);
 
-  // Bước 1 -> 2
-  const pickQuotation = useCallback(async (q: Quotation) => {
-    setSelQ(q); setSelTpl(null); setTemplates([]); setPreview(null); setErr(""); setLoadingT(true); setStep(2); setMaxStep(2);
-    try { setTemplates(await getJSON<Template[]>(`/api/quotations/${q.id}/templates`)); }
-    catch (e) { setErr((e as Error).message); }
-    finally { setLoadingT(false); }
-  }, []);
-
-  // Bước 2 -> 3: chọn template + tạo preview (lọc khách, dựng bảng, danh sách gửi)
+  // Bước 1 -> 2: chọn template + tạo preview (báo giá lấy từ chính template).
   const pickTemplate = useCallback(async (t: Template) => {
     setSelTpl(t); setErr(""); setBusy(true);
-    try { setPreview(await postJSON<Preview>("/api/send/preview", { templateId: t.id, actor: { name: actorName } })); setStep(3); setMaxStep(3); }
+    try { setPreview(await postJSON<Preview>("/api/send/preview", { templateId: t.id, actor: { name: actorName } })); setStep(2); setMaxStep(2); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   }, [actorName]);
 
-  // Bước 3 -> 4: sang bước điền ảnh
-  function goImage() { setHasImage(null); setSkipImage(false); setImgKey((k) => k + 1); setStep(4); setMaxStep(4); }
+  // Bước 2 -> 3: sang bước điền ảnh
+  function goImage() { setHasImage(null); setSkipImage(false); setImgKey((k) => k + 1); setStep(3); setMaxStep(3); }
 
   async function uploadImage(file: File | undefined) {
     if (!file || !selTpl) return;
@@ -157,7 +154,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   }, [batchId]);
 
   function resetAll() {
-    setBatchId(""); setBatch(null); setPreview(null); setSelTpl(null); setSelQ(null); setStep(1); setMaxStep(1); setErr("");
+    setBatchId(""); setBatch(null); setPreview(null); setSelTpl(null); setStep(1); setMaxStep(1); setErr("");
   }
 
   const errBox = err ? <div style={sx("background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6; border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px")}>{err}</div> : null;
@@ -195,55 +192,28 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     );
   }
 
-  // ================= Wizard 4 bước =================
+  // ================= Wizard 3 bước =================
+  const sendable = templates.filter((t) => t.quotation); // chỉ template đã gắn báo giá mới gửi được
   return (
     <div style={sx("max-width:760px")}>
       <Stepper step={step} maxStep={maxStep} onGo={setStep} />
       {errBox}
 
-      {/* Bước 1: chọn báo giá */}
+      {/* Bước 1: chọn template */}
       {step === 1 && (
         <div style={sx(card)}>
-          <div style={sx("font-size:15px; font-weight:700; color:#14261A; margin-bottom:12px")}>Chọn báo giá cần gửi</div>
-          {loadingQ && <div style={sx("font-size:13px; color:#8B9A90")}>Đang tải...</div>}
-          {qErr && <div style={sx("font-size:13px; color:#B3261E")}>Lỗi: {qErr}</div>}
-          {!loadingQ && !qErr && quotations.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có báo giá nào.</div>}
-          <div style={sx("display:flex; flex-direction:column; gap:8px")}>
-            {quotations.map((q) => (
-              <div key={q.id} onClick={() => pickQuotation(q)} style={sx("display:flex; align-items:center; gap:12px; border:1px solid #E9EEE9; border-radius:12px; padding:13px; cursor:pointer")}>
-                <div style={sx("width:40px; height:40px; border-radius:11px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0")}>📄</div>
-                <div style={sx("min-width:0; flex:1")}>
-                  <div style={sx("font-size:14.5px; font-weight:600; color:#14261A")}>{q.code}</div>
-                  <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.title || "—"} · {q._count.templates} template</div>
-                </div>
-                <div style={sx("text-align:right; flex-shrink:0")}>
-                  <div style={sx("font-size:13.5px; font-weight:700; color:#14261A")}>{money(q.totalAmount, q.currency)}</div>
-                  <div style={sx("font-size:11.5px; color:#7B8A80")}>{q.market || q.status}</div>
-                </div>
-                <span style={sx("color:#B9C5BC; font-size:18px")}>›</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Bước 2: chọn template */}
-      {step === 2 && (
-        <div style={sx(card)}>
-          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
-            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Chọn template trong {selQ?.code}</div>
-            <HButton s={ghost} onClick={() => setStep(1)}>‹ Đổi báo giá</HButton>
-          </div>
+          <div style={sx("font-size:15px; font-weight:700; color:#14261A; margin-bottom:12px")}>Chọn template cần gửi</div>
           {loadingT && <div style={sx("font-size:13px; color:#8B9A90")}>Đang tải template...</div>}
+          {tErr && <div style={sx("font-size:13px; color:#B3261E")}>Lỗi: {tErr}</div>}
           {busy && <div style={sx("font-size:13px; color:#2F6FD6")}>Đang lấy danh sách gửi...</div>}
-          {!loadingT && templates.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Báo giá này chưa có template. Vào menu Báo giá để gắn template.</div>}
+          {!loadingT && !tErr && sendable.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có template nào gắn báo giá để gửi.</div>}
           <div style={sx("display:flex; flex-direction:column; gap:8px")}>
-            {templates.map((t) => (
+            {sendable.map((t) => (
               <div key={t.id} onClick={() => !busy && pickTemplate(t)} style={sx("display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px; cursor:pointer")}>
                 <div style={sx("width:38px; height:38px; border-radius:11px; background:#F1F5F1; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0")}>{t.icon || "📄"}</div>
                 <div style={sx("min-width:0; flex:1")}>
                   <div style={sx("font-size:14px; font-weight:600; color:#14261A")}>{t.name}</div>
-                  <div style={sx("font-size:12px; color:#8B9A90")}>{t._count.customerLinks} khách · {t.channel ? t.channel.type : "chưa gắn kênh"}{t.waTemplateName ? ` · ${t.waTemplateName}` : ""}</div>
+                  <div style={sx("font-size:12px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.quotation?.code || "—"} · {t._count.customerLinks} khách · {t.channel ? t.channel.type : "chưa gắn kênh"}{t.waTemplateName ? ` · ${t.waTemplateName}` : ""}</div>
                 </div>
                 <span style={sx("color:#B9C5BC; font-size:18px")}>›</span>
               </div>
@@ -252,12 +222,12 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
         </div>
       )}
 
-      {/* Bước 3: danh sách gửi (xem trước) */}
-      {step === 3 && preview && (
+      {/* Bước 2: danh sách gửi (xem trước) */}
+      {step === 2 && preview && (
         <div style={sx(card)}>
           <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:12px")}>
             <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Danh sách gửi</div>
-            <HButton s={ghost} onClick={() => { setPreview(null); setStep(2); }}>‹ Đổi template</HButton>
+            <HButton s={ghost} onClick={() => { setPreview(null); setStep(1); }}>‹ Đổi template</HButton>
           </div>
 
           {/* Đầu mục */}
@@ -324,12 +294,12 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
         </div>
       )}
 
-      {/* Bước 4: điền ảnh & gửi */}
-      {step === 4 && selTpl && preview && (
+      {/* Bước 3: điền ảnh & gửi */}
+      {step === 3 && selTpl && preview && (
         <div style={sx(card)}>
           <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:6px")}>
             <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>Ảnh gửi kèm — {selTpl.name}</div>
-            <HButton s={ghost} onClick={() => setStep(3)}>‹ Xem lại danh sách</HButton>
+            <HButton s={ghost} onClick={() => setStep(2)}>‹ Xem lại danh sách</HButton>
           </div>
           <div style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}>Ảnh này gửi vào <b>header</b> của template WhatsApp (giống bot). Bắt buộc phải điền ảnh, hoặc tick “Bỏ qua ảnh” nếu template gửi text.</div>
           <input ref={fileRef} type="file" accept="image/*" style={sx("display:none")} onChange={(e) => uploadImage(e.target.files?.[0])} />

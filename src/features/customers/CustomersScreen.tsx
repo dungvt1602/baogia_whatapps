@@ -11,6 +11,7 @@ import { toast } from "sonner";
 type Customer = {
   id: string;
   name: string;
+  company: string | null;
   whatsappPhone: string | null;
   phone: string | null;
   email: string | null;
@@ -19,8 +20,8 @@ type Customer = {
   receiveQuotation: boolean;
   templates: { id: string; name: string }[];
 };
-type Form = { id?: string; name: string; whatsappPhone: string; phone: string; email: string; market: string; status: string; receiveQuotation: boolean };
-type SortKey = "name" | "whatsappPhone" | "phone" | "email" | "market" | "status";
+type Form = { id?: string; name: string; company: string; whatsappPhone: string; phone: string; email: string; market: string; status: string; receiveQuotation: boolean };
+type SortKey = "name" | "company" | "whatsappPhone" | "phone" | "email" | "market" | "status";
 
 const inp = "height:40px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
 const focus = "border-color:#3EA85C; box-shadow:0 0 0 3px rgba(62,168,92,.14)";
@@ -32,7 +33,7 @@ const lbl = "font-size:12px; font-weight:600; color:#3C4A40; margin-bottom:4px";
 const gth = "padding:6px 8px; font-size:11px; font-weight:700; color:#33475B; background:#EEF2F5; border:1px solid #D3DCE3; white-space:nowrap; user-select:none; text-align:left; position:sticky; top:0";
 const gtd = "padding:5px 8px; font-size:12px; color:#1B2A20; border:1px solid #E4EAEF; white-space:nowrap; background:inherit";
 
-const empty = (): Form => ({ name: "", whatsappPhone: "", phone: "", email: "", market: "", status: "ACTIVE", receiveQuotation: true });
+const empty = (): Form => ({ name: "", company: "", whatsappPhone: "", phone: "", email: "", market: "", status: "ACTIVE", receiveQuotation: true });
 
 // Hiển thị số WhatsApp: tách mã vùng dạng "(+84) 901234002".
 const fmtWa = (phone: string | null, market: string | null) => {
@@ -131,7 +132,7 @@ export default function CustomersScreen() {
 
   function openEdit(c: Customer) {
     setErrors({}); setErr("");
-    setForm({ id: c.id, name: c.name, whatsappPhone: c.whatsappPhone || "", phone: c.phone || "", email: c.email || "", market: c.market || "", status: c.status || "ACTIVE", receiveQuotation: c.receiveQuotation });
+    setForm({ id: c.id, name: c.name, company: c.company || "", whatsappPhone: c.whatsappPhone || "", phone: c.phone || "", email: c.email || "", market: c.market || "", status: c.status || "ACTIVE", receiveQuotation: c.receiveQuotation });
   }
   function openAdd() { setErrors({}); setErr(""); setForm(empty()); }
   async function save() {
@@ -168,8 +169,8 @@ export default function CustomersScreen() {
   }
   function exportCsv() {
     const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const head = ["TEN_KHACH", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "TEMPLATE"];
-    const data = view.map((c) => [c.name, c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.templates.map((t) => t.name).join("; ") || "Kho"]);
+    const head = ["TEN_KHACH", "CONG_TY", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "TEMPLATE"];
+    const data = view.map((c) => [c.name, c.company || "", c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.templates.map((t) => t.name).join("; ") || "Kho"]);
     const csv = [head, ...data].map((r) => r.map(cell).join(",")).join("\r\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
@@ -177,7 +178,7 @@ export default function CustomersScreen() {
   }
 
   const cols: { key: SortKey; label: string }[] = [
-    { key: "name", label: "Tên khách" }, { key: "whatsappPhone", label: "WhatsApp" }, { key: "phone", label: "SĐT" },
+    { key: "name", label: "Tên khách" }, { key: "company", label: "Công ty" }, { key: "whatsappPhone", label: "WhatsApp" }, { key: "phone", label: "SĐT" },
     { key: "email", label: "Email" }, { key: "market", label: "Thị trường" }, { key: "status", label: "Trạng thái" },
   ];
 
@@ -230,6 +231,7 @@ export default function CustomersScreen() {
                   <td style={sx(gtd + "; text-align:center")}><input type="checkbox" checked={on} onChange={() => toggleOne(c.id)} style={sx("cursor:pointer")} /></td>
                   <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(curPage - 1) * 15 + i + 1}</td>
                   <td style={sx(gtd + "; font-weight:600; max-width:170px; overflow:hidden; text-overflow:ellipsis; color:#1F7440; cursor:pointer; text-decoration:underline")} onClick={() => setDetail(c)} title={c.name}>{c.name}</td>
+                  <td style={sx(gtd + "; max-width:160px; overflow:hidden; text-overflow:ellipsis")} title={c.company || ""}>{c.company || "—"}</td>
                   <td style={sx(gtd + "; font-variant-numeric:tabular-nums")} title={c.whatsappPhone || ""}>{fmtWa(c.whatsappPhone, c.market)}</td>
                   <td style={sx(gtd)}>{c.phone || "—"}</td>
                   <td style={sx(gtd + "; max-width:180px; overflow:hidden; text-overflow:ellipsis")} title={c.email || ""}>{c.email || "—"}</td>
@@ -270,6 +272,7 @@ export default function CustomersScreen() {
             </div>
 
             <Field label="Tên khách hàng *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Fresh Orient Co." error={errors.name} />
+            <Field label="Công ty" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="VD: Ago Group" />
 
             {/* Quốc gia trước -> tự set sẵn mã vùng cho số WhatsApp */}
             <div style={sx("display:flex; gap:10px")}>
@@ -334,7 +337,7 @@ export default function CustomersScreen() {
       {/* Modal xem chi tiết */}
       {detail && (() => {
         const rows: [string, React.ReactNode][] = [
-          ["Tên khách", detail.name], ["Số WhatsApp", detail.whatsappPhone || "—"], ["SĐT khác", detail.phone || "—"],
+          ["Tên khách", detail.name], ["Công ty", detail.company || "—"], ["Số WhatsApp", detail.whatsappPhone || "—"], ["SĐT khác", detail.phone || "—"],
           ["Email", detail.email || "—"], ["Thị trường", detail.market || "—"], ["Trạng thái", detail.status],
           ["Nhận báo giá", detail.receiveQuotation ? "Có" : "Không"], ["Template", detail.templates.map((t) => t.name).join(", ") || "Kho"],
         ];
