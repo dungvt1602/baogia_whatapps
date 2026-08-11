@@ -17,8 +17,17 @@ export function getTemplateDetail(id: string) {
   return prisma.template.findUnique({
     where: { id: BigInt(id) },
     include: {
+      // Kèm mặt hàng + số template đang dùng chung: trang chi tiết template quản lý luôn báo giá.
       quotation: {
-        select: { id: true, code: true, title: true, market: true, currency: true, totalAmount: true, validUntil: true, issuedDate: true },
+        select: {
+          id: true, code: true, title: true, market: true, currency: true, totalAmount: true,
+          status: true, validUntil: true, issuedDate: true,
+          items: {
+            orderBy: { no: "asc" },
+            select: { id: true, no: true, product: true, packing: true, unit: true, quantity: true, price: true },
+          },
+          _count: { select: { templates: true } },
+        },
       },
       channel: { select: { id: true, name: true, type: true, accountId: true } },
       image: { select: { mime: true, updatedAt: true } }, // chỉ lấy metadata, KHÔNG lấy bytes

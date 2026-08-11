@@ -1,7 +1,12 @@
 import "server-only";
 import { prisma } from "@/server/db/prisma";
 import { computeTotal } from "@/server/lib/placeholders";
-import type { CreateQuotationInput, ItemInput } from "@/server/validation/quotation.schema";
+import type { CreateQuotationInput, UpdateQuotationInput, ItemInput } from "@/server/validation/quotation.schema";
+
+// "2026-08-20" -> Date (nửa đêm UTC, cột kiểu @db.Date). Chuỗi rỗng -> null.
+function toDate(v: string | null | undefined) {
+  return v ? new Date(v) : null;
+}
 
 export function listQuotations() {
   return prisma.quotation.findMany({
@@ -10,17 +15,45 @@ export function listQuotations() {
   });
 }
 
-export function createQuotation(input: CreateQuotationInput) {
+// Mã tự sinh theo năm: BG-2026-0001, BG-2026-0002... (theo mã lớn nhất đang có).
+async function nextQuotationCode() {
+  const prefix = `BG-${new Date().getFullYear()}-`;
+  const last = await prisma.quotation.findFirst({
+    where: { code: { startsWith: prefix } },
+    orderBy: { code: "desc" },
+    select: { code: true },
+  });
+  const n = last ? Number(last.code.slice(prefix.length)) || 0 : 0;
+  return prefix + String(n + 1).padStart(4, "0");
+}
+
+export async function createQuotation(input: CreateQuotationInput) {
+  const code = input.code?.trim() || (await nextQuotationCode());
   return prisma.quotation.create({
     data: {
-      code: input.code,
+      code,
       title: input.title ?? null,
       totalAmount: (input.totalAmount ?? 0).toString(),
       currency: input.currency ?? "VND",
       status: input.status ?? "DRAFT",
       market: input.market ?? null,
+      issuedDate: toDate(input.issuedDate),
+      validUntil: toDate(input.validUntil),
     },
   });
+}
+
+// Sửa thông tin báo giá. Chỉ đụng vào field được gửi lên.
+export function updateQuotation(id: string, input: UpdateQuotationInput) {
+  const data: Record<string, unknown> = {};
+  if (input.code !== undefined) data.code = input.code.trim();
+  if (input.title !== undefined) data.title = input.title || null;
+  if (input.currency !== undefined) data.currency = input.currency;
+  if (input.status !== undefined) data.status = input.status;
+  if (input.market !== undefined) data.market = input.market || null;
+  if (input.issuedDate !== undefined) data.issuedDate = toDate(input.issuedDate);
+  if (input.validUntil !== undefined) data.validUntil = toDate(input.validUntil);
+  return prisma.quotation.update({ where: { id: BigInt(id) }, data });
 }
 
 export function getQuotationWithItems(id: string) {
