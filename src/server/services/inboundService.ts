@@ -1,0 +1,108 @@
+import "server-only";
+import { prisma } from "@/server/db/prisma";
+
+// Chỉ giữ chữ số; khớp khách theo 9 số cuối (bỏ khác biệt +84 / 0 / mã vùng).
+export function phoneKey(p?: string | null): string {
+  const d = (p || "").replace(/\D/g, "");
+  return d.slice(-9);
+}
+
+// Tìm customerId khớp SĐT gửi đến (so 9 số cuối với whatsappPhone/phone).
+async function matchCustomerId(fromPhone: string): Promise<bigint | null> {
+  const key = phoneKey(fromPhone);
+  if (!key) return null;
+  const customers = await prisma.customer.findMany({
+    select: { id: true, whatsappPhone: true, phone: true },
+  });
+  const hit = customers.find(
+    (c) => phoneKey(c.whatsappPhone) === key || phoneKey(c.phone) === key,
+  );
+  return hit ? hit.id : null;
+}
+
+// Tóm tắt nội dung tin nhắn đến để hiển thị (giống bot).
+export function summarizeMessage(m: Record<string, unknown>): { kind: string; type: string; text: string } {
+  const type = String(m?.type || "");
+  const interactive = (m?.interactive || {}) as Record<string, unknown>;
+  // Nút Flow trả về -> nfm_reply
+  if (interactive?.type === "nfm_reply") {
+    const nfm = (interactive.nfm_reply || {}) as Record<string, unknown>;
+    return { kind: "flow_response", type, text: String(nfm?.response_json || nfm?.body || "[Flow] đã gửi") };
+  }
+  if (type === "text") return { kind: "message", type, text: String((m.text as Record<string, unknown>)?.body || "") };
+  if (type === "button") return { kind: "message", type, text: String((m.button as Record<string, unknown>)?.text || "") };
+  if (type === "interactive") {
+    const br = (interactive.button_reply || {}) as Record<string, unknown>;
+    const lr = (interactive.list_reply || {}) as Record<string, unknown>;
+    return { kind: "message", type, text: String(br?.title || lr?.title || "[interactive]") };
+  }
+  return { kind: "message", type, text: `[${type || "?"}]` };
+}
+
+// Lưu 1 tin khách trả lời (idempotent theo waMessageId — Meta hay gửi lại).
+export async function recordInbound(input: {
+  waMessageId?: string | null;
+  fromPhone: string;
+  kind: string;
+  type?: string | null;
+  text?: string | null;
+  raw?: unknown;
+}): Promise<void> {
+  const customerId = await matchCustomerId(input.fromPhone);
+  try {
+    await prisma.inboundMessage.create({
+      data: {
+        waMessageId: input.waMessageId ?? null,
+        fromPhone: input.fromPhone,
+        customerId,
+        kind: input.kind,
+        type: input.type ?? null,
+        text: input.text ?? null,
+        raw: (input.raw as never) ?? undefined,
+      },
+    });
+  } catch (err) {
+    // Trùng waMessageId (unique) -> bỏ qua, không phá webhook.
+    if (!(err instanceof Error && err.message.includes("Unique"))) throw err;
+  }
+}
+
+// Cập nhật trạng thái gửi khi Meta báo delivered/read/failed (khớp theo messageId).
+export async function updateDeliveryStatus(waMessageId: string, status: string): Promise<void> {
+  const s = status.toUpperCase(); // SENT | DELIVERED | READ | FAILED
+  await prisma.sendJob.updateMany({
+    where: { messageId: waMessageId },
+    data: { status: s === "SENT" ? "SENT" : s },
+  });
+}
+
+// ----- Đọc cho giao diện -----
+
+// Phản hồi gần đây (kèm tên/công ty khách) — cho Tổng quan + Hộp thư.
+export function listInbound(limit = 200) {
+  return prisma.inboundMessage.findMany({
+    orderBy: { receivedAt: "desc" },
+    take: limit,
+    include: { customer: { select: { name: true, company: true } } },
+  });
+}
+
+// Dọn phản hồi khách: xóa HẾT bản ghi quá `days` ngày (giống send_jobs, tránh phình DB).
+export async function cleanupInbound(days = 3) {
+  const before = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const r = await prisma.inboundMessage.deleteMany({
+    where: { receivedAt: { lt: before } },
+  });
+  return r.count;
+}
+
+// Thống kê phản hồi cho Tổng quan.
+export async function replyStats() {
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const [total, last7d, distinctRows] = await Promise.all([
+    prisma.inboundMessage.count(),
+    prisma.inboundMessage.count({ where: { receivedAt: { gte: since } } }),
+    prisma.inboundMessage.findMany({ where: { customerId: { not: null } }, distinct: ["customerId"], select: { customerId: true } }),
+  ]);
+  return { total, last7d, customersReplied: distinctRows.length };
+}

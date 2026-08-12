@@ -271,6 +271,8 @@ model Customer {
   // 1-1: customer -> audit_log
   auditLog AuditLog?
   sendJobs SendJob[]
+  // 1-N: customer -> tin nhắn khách trả lời (khớp theo SĐT lúc nhận webhook)
+  inboundMessages InboundMessage[]
 
   @@map("customers")
 }
@@ -373,4 +375,25 @@ model ActivityLog {
 
   @@index([createdAt])
   @@map("activity_logs")
+}
+
+// Tin nhắn KHÁCH TRẢ LỜI (đến từ webhook WhatsApp). Khớp customer theo SĐT.
+// kind: message = khách nhắn thường; flow_response = khách bấm nút Flow (đặt lịch...).
+model InboundMessage {
+  id          BigInt   @id @default(autoincrement())
+  waMessageId String?  @unique @map("wa_message_id") @db.VarChar(255) // chống trùng khi Meta gửi lại
+  fromPhone   String   @map("from_phone") @db.VarChar(30)
+  customerId  BigInt?  @map("customer_id")
+  channel     String   @default("WHATSAPP") @db.VarChar(20)
+  kind        String   @default("message") @db.VarChar(20) // message | flow_response
+  type        String?  @db.VarChar(30) // text | interactive | button | image...
+  text        String?  @db.Text // nội dung đã tóm tắt để hiển thị
+  raw         Json? // payload gốc để soi khi cần
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamp(6)
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([receivedAt])
+  @@index([customerId])
+  @@map("inbound_messages")
 }

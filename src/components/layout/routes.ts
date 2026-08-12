@@ -12,6 +12,8 @@ export const PATHS: Record<string, string> = {
   team: "/nguoi-dung",
   channels: "/kenh-gui",
   logs: "/nhat-ky",
+  sendjobs: "/log-gui",
+  inbox: "/phan-hoi",
 };
 
 export function keyToPath(key: string): string {

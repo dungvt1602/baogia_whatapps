@@ -30,6 +30,8 @@ export async function register() {
 
   // Dọn nhật ký lúc ~2h sáng (giờ VN): xóa log gửi thành công quá 3 ngày.
   const { cleanupSuccessLogs } = await import("@/server/services/activityService");
+  const { cleanupSendJobs } = await import("@/server/services/sendJobService");
+  const { cleanupInbound } = await import("@/server/services/inboundService");
   let lastCleanupDay = "";
   const vnNow = () => {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -46,9 +48,23 @@ export async function register() {
       lastCleanupDay = day;
       try {
         const n = await cleanupSuccessLogs(3);
-        console.log(`[logCleanup] xóa ${n} log gửi thành công quá 3 ngày`);
+        console.log(`[logCleanup] xóa ${n} log hoạt động (thành công) quá 3 ngày`);
       } catch (err) {
         console.error("[logCleanup] error:", err);
+      }
+      try {
+        // Log gửi (send_jobs): xóa HẾT quá 3 ngày dù thành công hay thất bại.
+        const n = await cleanupSendJobs(3);
+        console.log(`[logCleanup] xóa ${n} log gửi (send_jobs) quá 3 ngày`);
+      } catch (err) {
+        console.error("[logCleanup] sendJobs error:", err);
+      }
+      try {
+        // Phản hồi khách (inbound_messages): xóa HẾT quá 3 ngày.
+        const n = await cleanupInbound(3);
+        console.log(`[logCleanup] xóa ${n} phản hồi (inbound_messages) quá 3 ngày`);
+      } catch (err) {
+        console.error("[logCleanup] inbound error:", err);
       }
     }
   }, 15 * 60 * 1000); // kiểm tra mỗi 15 phút

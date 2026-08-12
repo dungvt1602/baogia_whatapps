@@ -117,6 +117,8 @@ export function useAgo() {
       ? [
           { key: "team", label: "Người dùng", icon: "☖" },
           { key: "channels", label: "Kênh gửi", icon: "⇄" },
+          { key: "sendjobs", label: "Log gửi", icon: "✉" },
+          { key: "inbox", label: "Phản hồi", icon: "💬" },
           { key: "logs", label: "Nhật ký", icon: "≡" },
         ]
       : []),
@@ -132,6 +134,8 @@ export function useAgo() {
     team: ["Quản trị người dùng", "Duyệt tài khoản mới và phân quyền"],
     channels: ["Kênh gửi báo giá", "Kết nối WhatsApp, Zalo và Telegram"],
     logs: ["Nhật ký hoạt động", "Toàn bộ thao tác trên hệ thống"],
+    sendjobs: ["Log gửi", "Chi tiết từng khách đã gửi — trạng thái, message id, lỗi"],
+    inbox: ["Phản hồi khách", "Tin khách trả lời qua WhatsApp — ai trả lời, nội dung gì"],
     new: ["Tạo báo giá", "Điền thông tin và gửi ngay qua kênh chat"],
     tpl: ["Quản lý template", "Mỗi template gắn 1 bảng giá và danh sách khách nhận"],
     send: ["Gửi báo giá", "Chọn template và gửi cho khách hàng của nó"],
@@ -199,7 +203,7 @@ export function useAgo() {
     detailCols: narrow ? "1fr" : "minmax(0,1.5fr) minmax(0,1fr)",
     colDisplay: st.w < 760 ? "none" : "block",
     newBtnStyle:
-      tiny || ["channels", "logs", "send", "products", "customers", "team"].includes(page) || (page === "tpl" && !st.tplQuoteId)
+      tiny || ["channels", "logs", "sendjobs", "inbox", "send", "products", "customers", "team"].includes(page) || (page === "tpl" && !st.tplQuoteId)
         ? "display:none"
         : "height:40px; padding:0 16px; border:none; border-radius:11px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:13.5px; font-weight:600; cursor:pointer; white-space:nowrap; box-shadow:0 8px 18px -9px rgba(31,116,64,.8)",
     newBtnLabel: page === "team" ? "+ Thêm người dùng" : page === "customers" ? "+ Thêm khách hàng" : page === "tpl" ? "+ Template mới" : "+ Báo giá mới",

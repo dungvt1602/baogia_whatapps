@@ -6,11 +6,14 @@ import { sx, HButton } from "@/components/common/ui";
 import { getJSON } from "@/components/common/api";
 
 type Activity = { id: string; actorName: string | null; action: string; target: string | null; result: string | null; createdAt: string };
+type Reply = { id: string; fromPhone: string; kind: string; type: string | null; text: string | null; receivedAt: string; customer: { name: string; company: string | null } | null };
 type Stats = {
   counts: { customers: number; templates: number; channels: number; users: number };
   customerActive: number;
   recentActivity: Activity[];
   batchStatus: { status: string; count: number }[];
+  recentReplies: Reply[];
+  replyStats: { last3d: number; customersReplied: number };
 };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
@@ -61,6 +64,35 @@ export default function DashboardScreen() {
                 <div style={sx("font-size:12px; color:#8B9A90; margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{k.sub}</div>
               </div>
             ))}
+          </div>
+
+          {/* Phản hồi khách gần đây — cho sếp xem nhanh ai đã trả lời gì */}
+          <div style={sx(card + "; margin-top:14px")}>
+            <div style={sx("display:flex; align-items:baseline; gap:10px; margin-bottom:10px; flex-wrap:wrap")}>
+              <div style={sx("font-size:16px; font-weight:700; color:#14261A")}>💬 Phản hồi khách gần đây</div>
+              <div style={sx("font-size:12.5px; color:#7B8A80")}>{s.replyStats.customersReplied} khách đã trả lời · {s.replyStats.last3d} tin trong 3 ngày</div>
+              <div style={sx("flex:1")} />
+              <HButton s="border:none; background:none; color:#2F8F4E; font-size:13px; font-weight:600; cursor:pointer; padding:0" onClick={() => router.push("/phan-hoi")}>Hộp thư →</HButton>
+            </div>
+            {s.recentReplies.length === 0 && (
+              <div style={sx("font-size:13px; color:#8B9A90; padding:8px 0")}>Chưa có phản hồi nào. Khách trả lời qua WhatsApp sẽ hiện ở đây (cần bật webhook).</div>
+            )}
+            <div style={sx("display:flex; flex-direction:column")}>
+              {s.recentReplies.map((r) => (
+                <div key={r.id} style={sx("display:flex; align-items:flex-start; gap:11px; padding:11px 0; border-top:1px solid #F2F5F2")}>
+                  <div style={sx("width:36px; height:36px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; flex-shrink:0")}>{(r.customer?.name || "?").trim().charAt(0).toUpperCase()}</div>
+                  <div style={sx("min-width:0; flex:1")}>
+                    <div style={sx("display:flex; align-items:baseline; gap:8px; flex-wrap:wrap")}>
+                      <span style={sx("font-size:13.5px; color:#14261A; font-weight:700")}>{r.customer?.name || r.fromPhone}</span>
+                      {r.customer?.company && <span style={sx("font-size:12px; color:#7B8A80")}>· {r.customer.company}</span>}
+                      {r.kind === "flow_response" && <span style={sx("font-size:10.5px; font-weight:700; color:#1F7440; background:#E7F5EC; border-radius:5px; padding:1px 6px")}>Flow</span>}
+                    </div>
+                    <div style={sx("font-size:13px; color:#3C4A40; margin-top:2px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical")}>{r.text || "—"}</div>
+                  </div>
+                  <div style={sx("font-size:11.5px; color:#9AA7A0; white-space:nowrap; flex-shrink:0")}>{fmtDate(r.receivedAt)}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="ago-collapse" style={sx("display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; margin-top:14px")}>
