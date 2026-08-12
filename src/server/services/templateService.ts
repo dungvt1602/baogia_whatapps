@@ -80,6 +80,7 @@ export function createTemplate(quotationId: string, input: CreateTemplateInput) 
       ...(input.waLanguage ? { waLanguage: input.waLanguage } : {}),
       ...(input.waCategory !== undefined ? { waCategory: input.waCategory ?? null } : {}),
       ...(input.waImage != null ? { waImage: input.waImage } : {}),
+      ...(input.waFlow != null ? { waFlow: input.waFlow } : {}),
     },
   });
 }
@@ -98,6 +99,7 @@ export function createStandaloneTemplate(input: CreateTemplateInput) {
       ...(input.waLanguage ? { waLanguage: input.waLanguage } : {}),
       ...(input.waCategory !== undefined ? { waCategory: input.waCategory ?? null } : {}),
       ...(input.waImage != null ? { waImage: input.waImage } : {}),
+      ...(input.waFlow != null ? { waFlow: input.waFlow } : {}),
     },
   });
 }
@@ -135,6 +137,7 @@ export function updateTemplate(id: string, input: UpdateTemplateInput) {
   if (input.waImage !== undefined) data.waImage = input.waImage;
   if (input.waBodyParams !== undefined) data.waBodyParams = input.waBodyParams || null;
   if (input.sendAsText !== undefined) data.sendAsText = input.sendAsText;
+  if (input.waFlow !== undefined) data.waFlow = input.waFlow;
   if (input.quotationId !== undefined) data.quotationId = input.quotationId ? BigInt(input.quotationId) : null;
   return prisma.template.update({ where: { id: BigInt(id) }, data });
 }

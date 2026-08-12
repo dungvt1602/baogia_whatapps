@@ -306,6 +306,7 @@ export async function processNextBatch() {
                 : job.toName
                   ? [{ value: job.toName }]
                   : [],
+              hasFlowButton: tpl.waFlow,
             }
           : null,
       });

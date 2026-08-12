@@ -13,6 +13,7 @@ export type WaTemplate = {
   // WhatsApp Manager) -> Meta bắt buộc gửi kèm `parameter_name`, thiếu là lỗi
   // "(#100) Parameter name is missing or empty".
   bodyParams?: { name?: string; value: string }[];
+  hasFlowButton?: boolean; // template Meta có nút Flow -> gửi kèm component nút Flow (giống bot)
 };
 
 export type SendInput = {
@@ -68,6 +69,7 @@ async function sendWhatsAppTemplate(opts: {
   mediaId?: string;
   includeImage: boolean;
   bodyParams: { name?: string; value: string }[];
+  hasFlowButton?: boolean;
 }): Promise<{ messageId: string }> {
   const components: unknown[] = [];
   if (opts.includeImage && opts.mediaId) {
@@ -81,6 +83,16 @@ async function sendWhatsAppTemplate(opts: {
         ...(p.name ? { parameter_name: p.name } : {}),
         text: p.value,
       })),
+    });
+  }
+  if (opts.hasFlowButton) {
+    // Nút Flow: gửi kèm component button (giống bot). Payload tối giản chỉ cần flow_token,
+    // chạy cho cả Flow loại Navigate lẫn Data-exchange. Thiếu -> Meta lỗi #131009 sub_type invalid.
+    components.push({
+      type: "button",
+      sub_type: "flow",
+      index: "0",
+      parameters: [{ type: "action", action: { flow_token: `AGO_${opts.to}_${crypto.randomUUID()}` } }],
     });
   }
   const payload = {
@@ -134,6 +146,7 @@ export async function sendQuotationMessage(input: SendInput): Promise<{ messageI
         mediaId: input.wa.mediaId,
         includeImage: input.wa.includeImage,
         bodyParams: input.wa.bodyParams ?? (input.toName ? [{ value: input.toName }] : []),
+        hasFlowButton: input.wa.hasFlowButton,
       });
     }
     // Gửi text (chỉ hoạt động trong cửa sổ 24h)

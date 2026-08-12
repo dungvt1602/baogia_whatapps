@@ -33,6 +33,7 @@ type TplDetail = {
   waImage: boolean;
   waBodyParams: string | null;
   sendAsText: boolean;
+  waFlow: boolean;
   createdAt: string;
   quotation: TplQuotation | null;
   channel: { id: string; name: string; type: string; accountId: string } | null;
@@ -61,6 +62,7 @@ type TplForm = {
   waCategory: string;
   waBodyParams: string;
   sendAsText: boolean;
+  waFlow: boolean;
 };
 
 const card =
@@ -241,6 +243,7 @@ export default function TemplatesScreen() {
       // Mẫu mới trên Meta mặc định dùng biến có tên -> điền sẵn cấu hình phổ biến nhất.
       waBodyParams: "customer_name={khách hàng}",
       sendAsText: false,
+      waFlow: false,
     });
   }
   async function openEdit() {
@@ -259,6 +262,7 @@ export default function TemplatesScreen() {
       waCategory: detail.waCategory || "MARKETING",
       waBodyParams: detail.waBodyParams || "",
       sendAsText: detail.sendAsText,
+      waFlow: !!detail.waFlow,
     });
   }
   async function saveForm() {
@@ -276,6 +280,7 @@ export default function TemplatesScreen() {
       waCategory: form.waCategory,
       waBodyParams: form.waBodyParams,
       sendAsText: form.sendAsText,
+      waFlow: form.waFlow,
     };
     try {
       if (form.id) {
@@ -572,6 +577,26 @@ export default function TemplatesScreen() {
           </select>
         </label>
         <label
+          style={sx(
+            "display:flex; align-items:flex-start; gap:9px; margin-bottom:12px; cursor:pointer",
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={form.waFlow}
+            onChange={(e) => setForm({ ...form, waFlow: e.target.checked })}
+            style={sx("margin-top:3px; width:16px; height:16px; accent-color:#3EA85C")}
+          />
+          <span style={sx("font-size:13px; color:#14261A; line-height:1.45")}>
+            Template Meta có <b>nút Flow</b> (đặt lịch/booking)
+            <br />
+            <span style={sx("color:#6B7C6E; font-size:12px")}>
+              Bật nếu mẫu đã duyệt có nút Flow (vd: daily_quotation_india_image).
+              Không bật mà mẫu có nút Flow sẽ báo lỗi #131009.
+            </span>
+          </span>
+        </label>
+        <label
           style={sx("display:flex; flex-direction:column; margin-bottom:12px")}
         >
           <span style={sx(lbl)}>
@@ -853,7 +878,7 @@ export default function TemplatesScreen() {
           value={detail?.waTemplateName || "— (chưa khai)"}
           sub={
             detail
-              ? `${detail.waCategory || "—"} · ${detail.waLanguage}${detail.waImage ? " · kèm ảnh" : ""}`
+              ? `${detail.waCategory || "—"} · ${detail.waLanguage}${detail.waImage ? " · kèm ảnh" : ""}${detail.waFlow ? " · nút Flow" : ""}`
               : undefined
           }
         />
