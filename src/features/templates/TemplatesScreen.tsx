@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { sx, HButton, HInput, HTextarea } from "@/components/common/ui";
+import { sx, HButton, HInput } from "@/components/common/ui";
 import {
   getJSON,
   postJSON,
@@ -70,6 +70,10 @@ const card =
 const inp =
   "height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
 const focus = "border-color:#3EA85C; box-shadow:0 0 0 3px rgba(62,168,92,.14)";
+// Style riêng cho <select>: bỏ mũi tên mặc định, thêm caret SVG bo tròn cho đẹp.
+// (data URI KHÔNG được chứa dấu ; vì sx() tách theo ;)
+const sel =
+  "height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 34px 0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%; background-color:#fff; -webkit-appearance:none; -moz-appearance:none; appearance:none; background-repeat:no-repeat; background-position:right 12px center; background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7C6E' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\"); cursor:pointer;";
 const green =
   "border:none; border-radius:9px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:13px; font-weight:600; cursor:pointer; padding:0 14px; height:36px;";
 const ghost =
@@ -267,7 +271,12 @@ export default function TemplatesScreen() {
   }
   async function saveForm() {
     if (!form?.name) return toast.error("Nhập tên hiển thị");
-    if (!form?.waTemplateName)
+    if (!form?.channelId) return toast.error("Chọn kênh gửi");
+    const selCh = channels.find((c) => c.id === form.channelId);
+    const chType = (selCh?.type || "").toUpperCase();
+    if (chType !== "WHATSAPP")
+      return toast.error("Hiện chỉ hỗ trợ khai template cho kênh WhatsApp");
+    if (!form.waTemplateName)
       return toast.error("Nhập tên template Meta (đã duyệt trên WhatsApp Manager)");
     const editing = !!form.id;
     const body = {
@@ -279,8 +288,9 @@ export default function TemplatesScreen() {
       waLanguage: form.waLanguage,
       waCategory: form.waCategory,
       waBodyParams: form.waBodyParams,
-      sendAsText: form.sendAsText,
-      waFlow: form.waFlow,
+      // Luôn gửi bằng template Meta + luôn kèm nút Flow (mọi template đều có Flow).
+      sendAsText: false,
+      waFlow: true,
     };
     try {
       if (form.id) {
@@ -361,6 +371,12 @@ export default function TemplatesScreen() {
 
   const lbl =
     "font-size:12px; font-weight:600; color:#3C4A40; margin-bottom:4px";
+  // Loại kênh đang chọn quyết định form khai template (WhatsApp/Zalo khác nhau).
+  const selChForm = channels.find((c) => c.id === form?.channelId);
+  const chTypeForm = (selChForm?.type || "").toUpperCase();
+  const isWaForm = chTypeForm === "WHATSAPP";
+  const isZaloForm = chTypeForm === "ZALO";
+  const noChForm = !form?.channelId;
   // Modal form dùng chung cho tạo & sửa
   const formModal = form && (
     <div
@@ -405,32 +421,6 @@ export default function TemplatesScreen() {
           đây chỉ khai <b>thông tin template Meta</b>.
         </div>
 
-        {/* Chọn kiểu gửi: text thường hay template Meta */}
-        <div
-          style={sx(
-            "border:1.5px solid #E4EAE4; border-radius:11px; padding:11px 13px; margin-bottom:14px; background:#FAFCFA",
-          )}
-        >
-          <label
-            style={sx(
-              "display:flex; align-items:flex-start; gap:9px; cursor:pointer",
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={form.sendAsText}
-              onChange={(e) => setForm({ ...form, sendAsText: e.target.checked })}
-              style={sx("cursor:pointer; width:16px; height:16px; margin-top:2px; flex-shrink:0")}
-            />
-            <span style={sx("font-size:13px; color:#3C4A40; line-height:1.5")}>
-              <b>Gửi dạng text thường</b> (bảng giá dạng chữ như bản cũ) — không kèm
-              ảnh, và WhatsApp chỉ nhận nếu khách đã nhắn cho bạn{" "}
-              <b>trong 24h</b>. Bỏ tick để gửi bằng <b>template Meta</b> (có ảnh
-              header, gửi được mọi lúc).
-            </span>
-          </label>
-        </div>
-
         <div style={sx("display:flex; gap:10px")}>
           <div style={sx("width:90px")}>
             <label
@@ -465,6 +455,46 @@ export default function TemplatesScreen() {
             </label>
           </div>
         </div>
+        {/* Kênh gửi chọn TRƯỚC — quyết định loại template (WhatsApp/Zalo khác nhau) */}
+        <label
+          style={sx("display:flex; flex-direction:column; margin-bottom:12px")}
+        >
+          <span style={sx(lbl)}>Kênh gửi *</span>
+          <select
+            value={form.channelId}
+            onChange={(e) => setForm({ ...form, channelId: e.target.value })}
+            style={sx(sel)}
+          >
+            <option value="">— chọn kênh gửi —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.type})
+              </option>
+            ))}
+          </select>
+        </label>
+        {noChForm && (
+          <div
+            style={sx(
+              "font-size:12.5px; color:#7B8A80; background:#F6F9F6; border:1px dashed #CFE0D2; border-radius:9px; padding:12px 13px; line-height:1.5",
+            )}
+          >
+            Chọn <b>kênh gửi</b> ở trên để khai thông tin template tương ứng —
+            WhatsApp và Zalo có cấu trúc template khác nhau.
+          </div>
+        )}
+        {isZaloForm && (
+          <div
+            style={sx(
+              "font-size:12.5px; color:#8A7B5E; background:#FBF7EF; border:1px solid #EFE2C9; border-radius:9px; padding:12px 13px; line-height:1.5",
+            )}
+          >
+            Kênh <b>Zalo ZNS</b> dùng template khác WhatsApp — phần khai báo Zalo
+            sẽ bổ sung sau. Hiện chỉ hỗ trợ khai template <b>WhatsApp</b>.
+          </div>
+        )}
+        {isWaForm && (
+          <>
         <label
           style={sx("display:flex; flex-direction:column; margin-bottom:12px")}
         >
@@ -509,7 +539,7 @@ export default function TemplatesScreen() {
           <code>{"{hiệu lực}"}</code> <code>{"{thị trường}"}</code>.
         </div>
         <div style={sx("display:flex; gap:10px")}>
-          <div style={sx("width:110px")}>
+          <div style={sx("flex:1")}>
             <label
               style={sx(
                 "display:flex; flex-direction:column; margin-bottom:12px",
@@ -521,7 +551,7 @@ export default function TemplatesScreen() {
                 onChange={(e) =>
                   setForm({ ...form, waLanguage: e.target.value })
                 }
-                style={sx(inp)}
+                style={sx(sel)}
               >
                 {/* Giữ lại giá trị hiện tại nếu không nằm trong danh sách chuẩn */}
                 {form.waLanguage &&
@@ -550,7 +580,7 @@ export default function TemplatesScreen() {
                 onChange={(e) =>
                   setForm({ ...form, waCategory: e.target.value })
                 }
-                style={sx(inp)}
+                style={sx(sel)}
               >
                 <option value="MARKETING">MARKETING</option>
                 <option value="UTILITY">UTILITY</option>
@@ -559,58 +589,8 @@ export default function TemplatesScreen() {
             </label>
           </div>
         </div>
-        <label
-          style={sx("display:flex; flex-direction:column; margin-bottom:12px")}
-        >
-          <span style={sx(lbl)}>Kênh gửi</span>
-          <select
-            value={form.channelId}
-            onChange={(e) => setForm({ ...form, channelId: e.target.value })}
-            style={sx(inp)}
-          >
-            <option value="">— chưa gắn —</option>
-            {channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.type})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label
-          style={sx(
-            "display:flex; align-items:flex-start; gap:9px; margin-bottom:12px; cursor:pointer",
-          )}
-        >
-          <input
-            type="checkbox"
-            checked={form.waFlow}
-            onChange={(e) => setForm({ ...form, waFlow: e.target.checked })}
-            style={sx("margin-top:3px; width:16px; height:16px; accent-color:#3EA85C")}
-          />
-          <span style={sx("font-size:13px; color:#14261A; line-height:1.45")}>
-            Template Meta có <b>nút Flow</b> (đặt lịch/booking)
-            <br />
-            <span style={sx("color:#6B7C6E; font-size:12px")}>
-              Bật nếu mẫu đã duyệt có nút Flow (vd: daily_quotation_india_image).
-              Không bật mà mẫu có nút Flow sẽ báo lỗi #131009.
-            </span>
-          </span>
-        </label>
-        <label
-          style={sx("display:flex; flex-direction:column; margin-bottom:12px")}
-        >
-          <span style={sx(lbl)}>
-            Nội dung template (dán từ Meta — chỉ để hiển thị)
-          </span>
-          <HTextarea
-            s="border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:10px 11px; font-size:13.5px; line-height:1.5; color:#14261A; outline:none; resize:vertical; font-family:inherit; width:100%;"
-            focus={focus}
-            rows={3}
-            value={form.body}
-            onChange={(e) => setForm({ ...form, body: e.target.value })}
-            placeholder="Kính gửi {{1}}, ... (copy đúng nội dung template trên Meta)"
-          />
-        </label>
+          </>
+        )}
         <div style={sx("display:flex; gap:10px; margin-top:6px")}>
           <HButton s={`${green} flex:1; height:44px`} onClick={saveForm}>
             {form.id ? "Lưu thay đổi" : "Tạo template"}
