@@ -47,27 +47,6 @@ model Channel {
 
 // ============================================================
 // KHO SẢN PHẨM (danh mục dùng chung — giống product rows của bot)
-// ============================================================
-// Sản phẩm dùng để báo giá — cấu trúc theo sheet bot (MA_SP, TEN_SP, GIA_MUA, HAO_HUT, VAN_CHUYEN, GIA_FINAL...).
-model Product {
-  id        BigInt    @id @default(autoincrement())
-  code      String    @unique @db.VarChar(100) // MA_SP — mã sản phẩm (duy nhất)
-  name      String    @db.VarChar(255) // TEN_SP — tên mặt hàng
-  unit      String?   @db.VarChar(50) // DON_VI — đơn vị (kg, quả...)
-  giaMua    Decimal?  @map("gia_mua") @db.Decimal(18, 2) // GIA_MUA — giá mua (null = hết hàng)
-  haoHut    Decimal   @default(0) @map("hao_hut") @db.Decimal(6, 2) // HAO_HUT — hao hụt (%)
-  vanChuyen Decimal   @default(0) @map("van_chuyen") @db.Decimal(18, 2) // VAN_CHUYEN — phí vận chuyển
-  // GIA_FINAL = giaMua × (1 + haoHut/100) + vanChuyen — tự tính khi lưu (null nếu hết hàng)
-  giaFinal  Decimal?  @map("gia_final") @db.Decimal(18, 2)
-  currency  String    @default("VND") @db.VarChar(10)
-  status    String    @default("ACTIVE") @db.VarChar(20) // STATUS
-  note      String?   @db.Text // GHI_CHU
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
-
-  @@index([status])
-  @@map("products")
-}
 
 // ============================================================
 // NGƯỜI DÙNG & PHÂN QUYỀN
@@ -268,6 +247,7 @@ model QuotationTemplateSend {
 model Customer {
   id               BigInt   @id @default(autoincrement())
   name             String   @db.VarChar(255)
+  company          String?  @db.VarChar(255) // công ty của khách hàng
   phone            String?  @db.VarChar(30)
   whatsappPhone    String?  @map("whatsapp_phone") @db.VarChar(30) // số nhận WhatsApp
   email            String?  @db.VarChar(255)

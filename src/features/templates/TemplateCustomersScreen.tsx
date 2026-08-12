@@ -40,7 +40,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
   const [markets, setMarkets] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [newC, setNewC] = useState<{ name: string; whatsappPhone: string; market: string } | null>(null);
+  const [newC, setNewC] = useState<{ name: string; company: string; whatsappPhone: string; market: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -105,7 +105,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
     if (!newC.whatsappPhone.trim()) { toast.error("Nhập số WhatsApp"); return; }
     setErr(""); setBusy(true);
     try {
-      await postJSON(`/api/templates/${templateId}/customers`, { name: newC.name.trim(), whatsappPhone: newC.whatsappPhone.trim(), market: newC.market.trim() || null });
+      await postJSON(`/api/templates/${templateId}/customers`, { name: newC.name.trim(), company: newC.company.trim() || null, whatsappPhone: newC.whatsappPhone.trim(), market: newC.market.trim() || null });
       setNewC(null);
       await load();
       toast.success("Đã thêm khách mới vào template");
@@ -133,7 +133,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
         </select>
         <div style={sx("font-size:12.5px; color:#7B8A80")}>{total} khách{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
-        <HButton s={green} onClick={() => setNewC({ name: "", whatsappPhone: "", market: market })}>+ Khách mới</HButton>
+        <HButton s={green} onClick={() => setNewC({ name: "", company: "", whatsappPhone: "", market: market })}>+ Khách mới</HButton>
       </div>
 
       {/* Thanh thao tác hàng loạt */}
@@ -212,6 +212,8 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
             </div>
             <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}><span style={sx(lbl)}>Tên khách *</span>
               <HInput s={inp} focus={focus} value={newC.name} onChange={(e) => setNewC({ ...newC, name: e.target.value })} placeholder="Fresh Orient Co." /></label>
+            <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}><span style={sx(lbl)}>Công ty</span>
+              <HInput s={inp} focus={focus} value={newC.company} onChange={(e) => setNewC({ ...newC, company: e.target.value })} placeholder="VD: Ago Group" /></label>
             <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}><span style={sx(lbl)}>Quốc gia</span>
               <CountrySelect value={newC.market} onSelect={(c) => setNewC({ ...newC, market: c.name, whatsappPhone: applyDial(newC.whatsappPhone, c.dial) })} /></label>
             <label style={sx("display:flex; flex-direction:column; margin-bottom:16px")}><span style={sx(lbl)}>Số WhatsApp *</span>

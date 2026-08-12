@@ -92,6 +92,7 @@ export function createCustomer(input: CreateCustomerInput) {
   return prisma.customer.create({
     data: {
       name: input.name,
+      company: input.company ?? null,
       phone: input.phone ?? null,
       whatsappPhone: input.whatsappPhone ?? input.phone ?? null,
       email: input.email ?? null,
@@ -108,6 +109,7 @@ export function createCustomer(input: CreateCustomerInput) {
 export function updateCustomer(id: string, input: PatchCustomerInput) {
   const data: Record<string, unknown> = {};
   if (input.name !== undefined) data.name = input.name;
+  if (input.company !== undefined) data.company = input.company;
   if (input.whatsappPhone !== undefined) data.whatsappPhone = input.whatsappPhone;
   if (input.phone !== undefined) data.phone = input.phone;
   if (input.email !== undefined) data.email = input.email;

@@ -11,6 +11,7 @@ import {
   sendJSON,
 } from "@/components/common/api";
 import { toast } from "sonner";
+import TemplateQuotationCard, { type TplQuotation } from "./TemplateQuotationCard";
 
 type Tpl = {
   id: string;
@@ -31,15 +32,7 @@ type TplDetail = {
   waCategory: string | null;
   waImage: boolean;
   createdAt: string;
-  quotation: {
-    id: string;
-    code: string;
-    title: string | null;
-    market: string | null;
-    currency: string;
-    totalAmount: unknown;
-    validUntil: string | null;
-  } | null;
+  quotation: TplQuotation | null;
   channel: { id: string; name: string; type: string; accountId: string } | null;
   image: { mime: string; updatedAt: string } | null;
   _count: { customerLinks: number };
@@ -76,8 +69,6 @@ const green =
 const ghost =
   "border:1px solid #DCE3DC; border-radius:9px; background:#fff; color:#4A5A4E; font-size:13px; font-weight:600; cursor:pointer; padding:0 12px; height:34px;";
 
-const money = (v: unknown, cur: string) =>
-  `${Number(v ?? 0).toLocaleString("vi-VN")} ${cur}`;
 const fmtDate = (s: string | null) =>
   s
     ? new Intl.DateTimeFormat("vi-VN", {
@@ -788,24 +779,6 @@ export default function TemplatesScreen() {
         )}
       >
         <Stat
-          label="Báo giá"
-          value={detail?.quotation?.code || "—"}
-          sub={
-            detail?.quotation
-              ? money(detail.quotation.totalAmount, detail.quotation.currency)
-              : undefined
-          }
-        />
-        <Stat
-          label="Thị trường"
-          value={detail?.quotation?.market || "—"}
-          sub={
-            detail?.quotation?.validUntil
-              ? `Hiệu lực đến ${fmtDate(detail.quotation.validUntil)}`
-              : undefined
-          }
-        />
-        <Stat
           label="Kênh gửi"
           value={detail?.channel?.name || "Chưa gắn"}
           sub={detail?.channel?.type}
@@ -829,6 +802,15 @@ export default function TemplatesScreen() {
           value={detail ? fmtDate(detail.createdAt) : "—"}
         />
       </div>
+
+      {/* Báo giá của template (bảng giá gửi đi) */}
+      {detail && (
+        <TemplateQuotationCard
+          templateId={detail.id}
+          quotation={detail.quotation}
+          onChanged={refresh}
+        />
+      )}
 
       {/* Nội dung tin nhắn + Ảnh báo giá */}
       <div

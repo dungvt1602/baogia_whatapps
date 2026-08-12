@@ -6,7 +6,6 @@ export const PATHS: Record<string, string> = {
   template: "/bao-gia/mau", // mock: chọn mẫu gửi cho 1 báo giá
   detail: "/bao-gia/chi-tiet", // mock: chi tiết báo giá
   customers: "/khach-hang",
-  products: "/san-pham",
   new: "/bao-gia/tao",
   tpl: "/template",
   send: "/gui-bao-gia",

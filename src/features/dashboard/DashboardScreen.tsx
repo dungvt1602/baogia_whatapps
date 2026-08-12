@@ -5,21 +5,15 @@ import { useRouter } from "next/navigation";
 import { sx, HButton } from "@/components/common/ui";
 import { getJSON } from "@/components/common/api";
 
-type RecentQ = { id: string; code: string; title: string | null; market: string | null; totalAmount: unknown; currency: string; status: string; createdAt: string; _count: { templates: number } };
 type Activity = { id: string; actorName: string | null; action: string; target: string | null; result: string | null; createdAt: string };
 type Stats = {
-  counts: { quotations: number; customers: number; products: number; templates: number; channels: number; users: number };
+  counts: { customers: number; templates: number; channels: number; users: number };
   customerActive: number;
-  productActive: number;
-  quotationTotal: unknown;
-  recentQuotations: RecentQ[];
   recentActivity: Activity[];
   batchStatus: { status: string; count: number }[];
 };
 
 const card = "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
-const num = (v: unknown) => { const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0; };
-const money = (v: unknown) => `${num(v).toLocaleString("vi-VN")} ₫`;
 const fmtDate = (s: string) => new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(s));
 
 const statusColor = (s: string) => {
@@ -42,9 +36,7 @@ export default function DashboardScreen() {
   }, [load]);
 
   const kpis = s ? [
-    { label: "Báo giá", icon: "📄", value: s.counts.quotations, sub: money(s.quotationTotal), to: "/bao-gia" },
     { label: "Khách hàng", icon: "◎", value: s.counts.customers, sub: `${s.customerActive} đang hoạt động`, to: "/khach-hang" },
-    { label: "Sản phẩm", icon: "🍎", value: s.counts.products, sub: `${s.productActive} đang bán`, to: "/san-pham" },
     { label: "Template", icon: "◆", value: s.counts.templates, sub: "mẫu gửi", to: "/template" },
     { label: "Kênh gửi", icon: "⇄", value: s.counts.channels, sub: "WhatsApp/Zalo/Telegram", to: "/kenh-gui" },
     { label: "Người dùng", icon: "◔", value: s.counts.users, sub: "tài khoản", to: "/nguoi-dung" },
@@ -71,67 +63,41 @@ export default function DashboardScreen() {
             ))}
           </div>
 
-          <div className="ago-collapse" style={sx("display:grid; grid-template-columns:1.6fr 1fr; gap:14px; margin-top:14px")}>
-            {/* Báo giá gần đây */}
+          <div className="ago-collapse" style={sx("display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; margin-top:14px")}>
+            {/* Trạng thái gửi */}
             <div style={sx(card)}>
-              <div style={sx("display:flex; align-items:baseline; gap:10px; margin-bottom:8px")}>
-                <div style={sx("font-size:16px; font-weight:700; color:#14261A")}>Báo giá gần đây</div>
-                <div style={sx("flex:1")} />
-                <HButton s="border:none; background:none; color:#2F8F4E; font-size:13px; font-weight:600; cursor:pointer; padding:0" onClick={() => router.push("/bao-gia")}>Xem tất cả →</HButton>
-              </div>
-              {s.recentQuotations.length === 0 && <div style={sx("font-size:13px; color:#8B9A90; padding:10px 0")}>Chưa có báo giá.</div>}
-              <div style={sx("display:flex; flex-direction:column")}>
-                {s.recentQuotations.map((q) => (
-                  <div key={q.id} onClick={() => router.push(`/bao-gia/${q.id}`)} style={sx("display:flex; align-items:center; gap:12px; padding:11px 8px; border-radius:11px; cursor:pointer; border-top:1px solid #F2F5F2")}>
-                    <div style={sx("width:36px; height:36px; border-radius:10px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0")}>📄</div>
-                    <div style={sx("min-width:0; flex:1")}>
-                      <div style={sx("font-size:14px; font-weight:600; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.code}</div>
-                      <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{q.title || "—"} · {q._count.templates} template</div>
-                    </div>
-                    <div style={sx("text-align:right; flex-shrink:0")}>
-                      <div style={sx("font-size:13.5px; font-weight:700; color:#14261A")}>{money(q.totalAmount)}</div>
-                      <div style={sx(`font-size:11.5px; font-weight:600; color:${statusColor(q.status)}`)}>{q.market || q.status}</div>
-                    </div>
+              <div style={sx("font-size:16px; font-weight:700; color:#14261A; margin-bottom:12px")}>Trạng thái gửi</div>
+              {s.batchStatus.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có lệnh gửi nào.</div>}
+              <div style={sx("display:flex; flex-direction:column; gap:9px")}>
+                {s.batchStatus.map((b) => (
+                  <div key={b.status} style={sx("display:flex; align-items:center; gap:8px; font-size:13px")}>
+                    <span style={sx(`width:9px; height:9px; border-radius:50%; background:${statusColor(b.status)}`)} />
+                    <span style={sx("color:#3C4A40; font-weight:500")}>{b.status}</span>
+                    <span style={sx("flex:1")} />
+                    <span style={sx("font-weight:700; color:#14261A")}>{b.count}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Cột phải: trạng thái gửi + hoạt động */}
-            <div style={sx("display:flex; flex-direction:column; gap:14px")}>
-              <div style={sx(card)}>
-                <div style={sx("font-size:16px; font-weight:700; color:#14261A; margin-bottom:12px")}>Trạng thái gửi</div>
-                {s.batchStatus.length === 0 && <div style={sx("font-size:13px; color:#8B9A90")}>Chưa có lệnh gửi nào.</div>}
-                <div style={sx("display:flex; flex-direction:column; gap:9px")}>
-                  {s.batchStatus.map((b) => (
-                    <div key={b.status} style={sx("display:flex; align-items:center; gap:8px; font-size:13px")}>
-                      <span style={sx(`width:9px; height:9px; border-radius:50%; background:${statusColor(b.status)}`)} />
-                      <span style={sx("color:#3C4A40; font-weight:500")}>{b.status}</span>
-                      <span style={sx("flex:1")} />
-                      <span style={sx("font-weight:700; color:#14261A")}>{b.count}</span>
-                    </div>
-                  ))}
-                </div>
+            {/* Hoạt động gần đây */}
+            <div style={sx(card)}>
+              <div style={sx("display:flex; align-items:baseline; gap:10px; margin-bottom:8px")}>
+                <div style={sx("font-size:16px; font-weight:700; color:#14261A")}>Hoạt động gần đây</div>
+                <div style={sx("flex:1")} />
+                <HButton s="border:none; background:none; color:#2F8F4E; font-size:13px; font-weight:600; cursor:pointer; padding:0" onClick={() => router.push("/nhat-ky")}>Nhật ký →</HButton>
               </div>
-
-              <div style={sx(card)}>
-                <div style={sx("display:flex; align-items:baseline; gap:10px; margin-bottom:8px")}>
-                  <div style={sx("font-size:16px; font-weight:700; color:#14261A")}>Hoạt động gần đây</div>
-                  <div style={sx("flex:1")} />
-                  <HButton s="border:none; background:none; color:#2F8F4E; font-size:13px; font-weight:600; cursor:pointer; padding:0" onClick={() => router.push("/nhat-ky")}>Nhật ký →</HButton>
-                </div>
-                {s.recentActivity.length === 0 && <div style={sx("font-size:13px; color:#8B9A90; padding:6px 0")}>Chưa có hoạt động.</div>}
-                <div style={sx("display:flex; flex-direction:column")}>
-                  {s.recentActivity.map((a) => (
-                    <div key={a.id} style={sx("display:flex; align-items:flex-start; gap:9px; padding:8px 0; border-top:1px solid #F2F5F2")}>
-                      <span style={sx(`width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; background:${statusColor(a.result || "")}`)} />
-                      <div style={sx("min-width:0; flex:1")}>
-                        <div style={sx("font-size:12.5px; color:#14261A; font-weight:600")}>{a.action}{a.target ? ` · ${a.target}` : ""}</div>
-                        <div style={sx("font-size:11.5px; color:#8B9A90")}>{a.actorName || "Hệ thống"} · {fmtDate(a.createdAt)}</div>
-                      </div>
+              {s.recentActivity.length === 0 && <div style={sx("font-size:13px; color:#8B9A90; padding:6px 0")}>Chưa có hoạt động.</div>}
+              <div style={sx("display:flex; flex-direction:column")}>
+                {s.recentActivity.map((a) => (
+                  <div key={a.id} style={sx("display:flex; align-items:flex-start; gap:9px; padding:8px 0; border-top:1px solid #F2F5F2")}>
+                    <span style={sx(`width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; background:${statusColor(a.result || "")}`)} />
+                    <div style={sx("min-width:0; flex:1")}>
+                      <div style={sx("font-size:12.5px; color:#14261A; font-weight:600")}>{a.action}{a.target ? ` · ${a.target}` : ""}</div>
+                      <div style={sx("font-size:11.5px; color:#8B9A90")}>{a.actorName || "Hệ thống"} · {fmtDate(a.createdAt)}</div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
