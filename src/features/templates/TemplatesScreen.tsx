@@ -127,24 +127,6 @@ function Stat({
   );
 }
 
-// Render nội dung tin nhắn, tô sáng biến {…}
-function renderBody(body: string) {
-  return body.split(/(\{[^}]+\})/g).map((part, i) =>
-    part.startsWith("{") && part.endsWith("}") ? (
-      <span
-        key={i}
-        style={sx(
-          "background:#EAF3EC; color:#1F7440; border-radius:6px; padding:1px 6px; font-weight:600",
-        )}
-      >
-        {part}
-      </span>
-    ) : (
-      <span key={i}>{part}</span>
-    ),
-  );
-}
-
 export default function TemplatesScreen() {
   const router = useRouter();
   const pathname = usePathname();
@@ -900,27 +882,12 @@ export default function TemplatesScreen() {
               )}
             />
             <div style={sx("font-size:15px; font-weight:700; color:#14261A")}>
-              Nội dung template Meta
+              Cách gửi WhatsApp
             </div>
           </div>
           <div
             style={sx(
-              "background:#F6F9F6; border:1px solid #E9EEE9; border-radius:13px; padding:15px; font-size:13.5px; line-height:1.75; color:#3C4A40; white-space:pre-wrap",
-            )}
-          >
-            {detail?.body ? (
-              renderBody(detail.body)
-            ) : (
-              <span style={sx("color:#8B9A90")}>Chưa có nội dung.</span>
-            )}
-          </div>
-          <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>
-            Nội dung do Meta quy định (chỉ hiển thị). Khi gửi, WhatsApp dùng
-            đúng template đã duyệt + tham số.
-          </div>
-          <div
-            style={sx(
-              "font-size:11.5px; margin-top:8px; padding-top:8px; border-top:1px solid #EDF1ED; color:#7B8A80; line-height:1.5",
+              "font-size:12.5px; color:#7B8A80; line-height:1.6",
             )}
           >
             {detail?.sendAsText ? (
