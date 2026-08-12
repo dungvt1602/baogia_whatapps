@@ -192,6 +192,14 @@ model Template {
   waLanguage     String  @default("vi") @map("wa_language") @db.VarChar(10)
   waCategory     String? @map("wa_category") @db.VarChar(30) // MARKETING | UTILITY | AUTHENTICATION (theo Meta)
   waImage        Boolean @default(true) @map("wa_image") // gửi kèm ảnh báo giá làm header
+  // Bật = gửi TEXT thường (bảng giá dạng chữ, chỉ trong cửa sổ 24h, không ảnh) dù đã khai
+  // waTemplateName. Tắt (mặc định) = gửi bằng template Meta nếu có waTemplateName.
+  sendAsText     Boolean @default(false) @map("send_as_text")
+  // Tham số phần body khi gửi template Meta, ngăn cách bằng dấu phẩy.
+  // "customer_name={khách hàng}" -> biến có tên (Loại biến = Tên trên WhatsApp Manager)
+  // "{khách hàng}, {mã}"         -> biến vị trí {{1}}, {{2}}
+  // Trống -> 1 biến vị trí = tên khách (giữ nguyên hành vi cũ).
+  waBodyParams   String? @map("wa_body_params") @db.VarChar(500)
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)

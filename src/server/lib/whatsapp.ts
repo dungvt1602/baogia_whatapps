@@ -9,6 +9,10 @@ export type WaTemplate = {
   language: string;
   mediaId?: string;
   includeImage: boolean;
+  // Tham số body đã render sẵn. Có `name` = mẫu dùng biến có tên (Loại biến "Tên" trên
+  // WhatsApp Manager) -> Meta bắt buộc gửi kèm `parameter_name`, thiếu là lỗi
+  // "(#100) Parameter name is missing or empty".
+  bodyParams?: { name?: string; value: string }[];
 };
 
 export type SendInput = {
@@ -63,14 +67,21 @@ async function sendWhatsAppTemplate(opts: {
   language: string;
   mediaId?: string;
   includeImage: boolean;
-  customerName: string;
+  bodyParams: { name?: string; value: string }[];
 }): Promise<{ messageId: string }> {
   const components: unknown[] = [];
   if (opts.includeImage && opts.mediaId) {
     components.push({ type: "header", parameters: [{ type: "image", image: { id: opts.mediaId } }] });
   }
-  if (opts.customerName) {
-    components.push({ type: "body", parameters: [{ type: "text", text: opts.customerName }] });
+  if (opts.bodyParams.length) {
+    components.push({
+      type: "body",
+      parameters: opts.bodyParams.map((p) => ({
+        type: "text",
+        ...(p.name ? { parameter_name: p.name } : {}),
+        text: p.value,
+      })),
+    });
   }
   const payload = {
     messaging_product: "whatsapp",
@@ -89,7 +100,14 @@ async function sendWhatsAppTemplate(opts: {
     body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data?.error) throw new Error("WhatsApp template lỗi: " + JSON.stringify(data?.error || data));
+  if (!res.ok || data?.error) {
+    // Kèm payload đã gửi để soi được lệch chỗ nào (không chứa token).
+    const sent = JSON.stringify(payload.template);
+    console.error("[whatsapp] template bị từ chối. Payload gửi đi:", sent);
+    throw new Error(
+      "WhatsApp template lỗi: " + JSON.stringify(data?.error || data) + " | đã gửi: " + sent.slice(0, 600),
+    );
+  }
   return { messageId: data?.messages?.[0]?.id || "" };
 }
 
@@ -115,7 +133,7 @@ export async function sendQuotationMessage(input: SendInput): Promise<{ messageI
         language: input.wa.language,
         mediaId: input.wa.mediaId,
         includeImage: input.wa.includeImage,
-        customerName: input.toName || "",
+        bodyParams: input.wa.bodyParams ?? (input.toName ? [{ value: input.toName }] : []),
       });
     }
     // Gửi text (chỉ hoạt động trong cửa sổ 24h)

@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/server/db/prisma";
-import { renderTemplate } from "@/server/lib/placeholders";
+import { renderTemplate, renderBodyParams } from "@/server/lib/placeholders";
 import { sendQuotationMessage, uploadWhatsAppMedia } from "@/server/lib/whatsapp";
 import { getTemplateImage } from "@/server/services/templateService";
 import { logActivity } from "@/server/services/activityService";
@@ -242,7 +242,9 @@ export async function processNextBatch() {
 
   // Ảnh header = ảnh do người dùng upload vào template (giống bot). Có ảnh thì gửi kèm.
   const tplImage = await getTemplateImage(tpl.id);
-  const useWaTemplate = (channel?.type || "").toUpperCase() === "WHATSAPP" && !!tpl.waTemplateName;
+  // sendAsText bật -> ép đi đường text thường (như commit cũ), bỏ qua template Meta.
+  const useWaTemplate =
+    (channel?.type || "").toUpperCase() === "WHATSAPP" && !!tpl.waTemplateName && !tpl.sendAsText;
   const includeImage = !!tplImage;
   let mediaId = batch.mediaId || "";
 
@@ -299,6 +301,11 @@ export async function processNextBatch() {
               language: tpl.waLanguage,
               mediaId,
               includeImage,
+              bodyParams: tpl.quotation
+                ? renderBodyParams(tpl.waBodyParams, tpl.quotation, { name: job.toName || "" }, tpl.quotation.items)
+                : job.toName
+                  ? [{ value: job.toName }]
+                  : [],
             }
           : null,
       });

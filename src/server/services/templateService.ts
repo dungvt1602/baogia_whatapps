@@ -75,6 +75,8 @@ export function createTemplate(quotationId: string, input: CreateTemplateInput) 
       body: input.body ?? input.content ?? null,
       channelId: input.channelId ? BigInt(input.channelId) : null,
       waTemplateName: input.waTemplateName ?? null,
+      waBodyParams: input.waBodyParams || null,
+      ...(input.sendAsText != null ? { sendAsText: input.sendAsText } : {}),
       ...(input.waLanguage ? { waLanguage: input.waLanguage } : {}),
       ...(input.waCategory !== undefined ? { waCategory: input.waCategory ?? null } : {}),
       ...(input.waImage != null ? { waImage: input.waImage } : {}),
@@ -91,6 +93,8 @@ export function createStandaloneTemplate(input: CreateTemplateInput) {
       body: input.body ?? input.content ?? null,
       channelId: input.channelId ? BigInt(input.channelId) : null,
       waTemplateName: input.waTemplateName ?? null,
+      waBodyParams: input.waBodyParams || null,
+      ...(input.sendAsText != null ? { sendAsText: input.sendAsText } : {}),
       ...(input.waLanguage ? { waLanguage: input.waLanguage } : {}),
       ...(input.waCategory !== undefined ? { waCategory: input.waCategory ?? null } : {}),
       ...(input.waImage != null ? { waImage: input.waImage } : {}),
@@ -129,6 +133,8 @@ export function updateTemplate(id: string, input: UpdateTemplateInput) {
   if (input.waLanguage !== undefined) data.waLanguage = input.waLanguage;
   if (input.waCategory !== undefined) data.waCategory = input.waCategory ?? null;
   if (input.waImage !== undefined) data.waImage = input.waImage;
+  if (input.waBodyParams !== undefined) data.waBodyParams = input.waBodyParams || null;
+  if (input.sendAsText !== undefined) data.sendAsText = input.sendAsText;
   if (input.quotationId !== undefined) data.quotationId = input.quotationId ? BigInt(input.quotationId) : null;
   return prisma.template.update({ where: { id: BigInt(id) }, data });
 }

@@ -31,6 +31,8 @@ type TplDetail = {
   waLanguage: string;
   waCategory: string | null;
   waImage: boolean;
+  waBodyParams: string | null;
+  sendAsText: boolean;
   createdAt: string;
   quotation: TplQuotation | null;
   channel: { id: string; name: string; type: string; accountId: string } | null;
@@ -57,6 +59,8 @@ type TplForm = {
   waTemplateName: string;
   waLanguage: string;
   waCategory: string;
+  waBodyParams: string;
+  sendAsText: boolean;
 };
 
 const card =
@@ -234,6 +238,9 @@ export default function TemplatesScreen() {
       waTemplateName: "",
       waLanguage: "vi",
       waCategory: "MARKETING",
+      // Mẫu mới trên Meta mặc định dùng biến có tên -> điền sẵn cấu hình phổ biến nhất.
+      waBodyParams: "customer_name={khách hàng}",
+      sendAsText: false,
     });
   }
   async function openEdit() {
@@ -250,6 +257,8 @@ export default function TemplatesScreen() {
       waTemplateName: detail.waTemplateName || "",
       waLanguage: detail.waLanguage || "vi",
       waCategory: detail.waCategory || "MARKETING",
+      waBodyParams: detail.waBodyParams || "",
+      sendAsText: detail.sendAsText,
     });
   }
   async function saveForm() {
@@ -265,6 +274,8 @@ export default function TemplatesScreen() {
       waTemplateName: form.waTemplateName,
       waLanguage: form.waLanguage,
       waCategory: form.waCategory,
+      waBodyParams: form.waBodyParams,
+      sendAsText: form.sendAsText,
     };
     try {
       if (form.id) {
@@ -388,6 +399,33 @@ export default function TemplatesScreen() {
           Template phải được <b>duyệt trên WhatsApp Manager (Meta)</b> trước. Ở
           đây chỉ khai <b>thông tin template Meta</b>.
         </div>
+
+        {/* Chọn kiểu gửi: text thường hay template Meta */}
+        <div
+          style={sx(
+            "border:1.5px solid #E4EAE4; border-radius:11px; padding:11px 13px; margin-bottom:14px; background:#FAFCFA",
+          )}
+        >
+          <label
+            style={sx(
+              "display:flex; align-items:flex-start; gap:9px; cursor:pointer",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={form.sendAsText}
+              onChange={(e) => setForm({ ...form, sendAsText: e.target.checked })}
+              style={sx("cursor:pointer; width:16px; height:16px; margin-top:2px; flex-shrink:0")}
+            />
+            <span style={sx("font-size:13px; color:#3C4A40; line-height:1.5")}>
+              <b>Gửi dạng text thường</b> (bảng giá dạng chữ như bản cũ) — không kèm
+              ảnh, và WhatsApp chỉ nhận nếu khách đã nhắn cho bạn{" "}
+              <b>trong 24h</b>. Bỏ tick để gửi bằng <b>template Meta</b> (có ảnh
+              header, gửi được mọi lúc).
+            </span>
+          </label>
+        </div>
+
         <div style={sx("display:flex; gap:10px")}>
           <div style={sx("width:90px")}>
             <label
@@ -438,6 +476,33 @@ export default function TemplatesScreen() {
             placeholder="daily_quotation_india_image"
           />
         </label>
+        <label
+          style={sx("display:flex; flex-direction:column; margin-bottom:4px")}
+        >
+          <span style={sx(lbl)}>Tham số body của mẫu Meta</span>
+          <HInput
+            s={inp}
+            focus={focus}
+            value={form.waBodyParams}
+            onChange={(e) =>
+              setForm({ ...form, waBodyParams: e.target.value })
+            }
+            placeholder="customer_name={khách hàng}"
+          />
+        </label>
+        <div
+          style={sx(
+            "font-size:11.5px; color:#7B8A80; margin-bottom:12px; line-height:1.5",
+          )}
+        >
+          Mẫu để <b>Loại biến = Tên</b> trên WhatsApp Manager thì bắt buộc khai
+          ở đây theo dạng <code>tên_biến={"{giá trị}"}</code>, nhiều biến cách
+          nhau bởi dấu phẩy. Mẫu dùng biến vị trí <code>{"{{1}}"}</code> thì chỉ
+          cần <code>{"{khách hàng}, {mã}"}</code>. Giá trị dùng đúng bộ biến của
+          nội dung tin nhắn: <code>{"{khách hàng}"}</code>{" "}
+          <code>{"{mã}"}</code> <code>{"{tổng}"}</code>{" "}
+          <code>{"{hiệu lực}"}</code> <code>{"{thị trường}"}</code>.
+        </div>
         <div style={sx("display:flex; gap:10px")}>
           <div style={sx("width:110px")}>
             <label
@@ -847,6 +912,36 @@ export default function TemplatesScreen() {
           <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>
             Nội dung do Meta quy định (chỉ hiển thị). Khi gửi, WhatsApp dùng
             đúng template đã duyệt + tham số.
+          </div>
+          <div
+            style={sx(
+              "font-size:11.5px; margin-top:8px; padding-top:8px; border-top:1px solid #EDF1ED; color:#7B8A80; line-height:1.5",
+            )}
+          >
+            {detail?.sendAsText ? (
+              <span style={sx("color:#2F6FD6")}>
+                Kiểu gửi: <b>Text thường</b> — bảng giá dạng chữ, không ảnh, chỉ
+                trong cửa sổ 24h.{detail?.waTemplateName ? " (Template Meta đang bị bỏ qua.)" : ""}
+              </span>
+            ) : detail?.waTemplateName ? (
+              <>
+                Kiểu gửi: <b style={sx("color:#3C4A40")}>Template Meta</b> — có ảnh
+                header. Tham số body:{" "}
+                {detail.waBodyParams ? (
+                  <b style={sx("color:#3C4A40")}>{detail.waBodyParams}</b>
+                ) : (
+                  <span style={sx("color:#B07208")}>
+                    chưa khai — mẫu đặt Loại biến “Tên” trên Meta sẽ báo lỗi{" "}
+                    <b>Parameter name is missing</b>.
+                  </span>
+                )}
+              </>
+            ) : (
+              <span style={sx("color:#2F6FD6")}>
+                Kiểu gửi: <b>Text thường</b> (chưa khai template Meta) — không ảnh,
+                chỉ trong cửa sổ 24h.
+              </span>
+            )}
           </div>
         </div>
 

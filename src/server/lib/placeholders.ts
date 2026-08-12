@@ -88,6 +88,38 @@ export function renderTemplate(
   });
 }
 
+// Tham số phần body khi gửi bằng template Meta đã duyệt.
+// name có giá trị -> Meta yêu cầu "parameter_name" (mẫu đặt Loại biến = Tên).
+export type BodyParam = { name?: string; value: string };
+
+// Dựng danh sách tham số body từ chuỗi cấu hình của template.
+//   "customer_name={khách hàng}"  -> [{ name: "customer_name", value: "Andy" }]
+//   "{khách hàng}, {mã}"          -> [{ value: "Andy" }, { value: "BG-2026-0001" }]
+//   trống                          -> [{ value: <tên khách> }]  (giữ nguyên hành vi cũ)
+export function renderBodyParams(
+  spec: string | null | undefined,
+  quotation: QuotationLike,
+  customer?: CustomerLike,
+  items: ItemLike[] = [],
+): BodyParam[] {
+  const raw = (spec || "").trim();
+  if (!raw) {
+    const name = customer?.name ?? "";
+    return name ? [{ value: name }] : [];
+  }
+
+  return raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      // "ten_bien = {placeholder}" -> biến có tên; còn lại là biến vị trí.
+      const m = part.match(/^([A-Za-z0-9_]+)\s*=\s*(.+)$/);
+      const [name, expr] = m ? [m[1], m[2]] : [undefined, part];
+      return { name, value: renderTemplate(expr, quotation, customer, items) };
+    });
+}
+
 // Tính tổng tiền báo giá = Σ(quantity * price).
 export function computeTotal(items: { quantity: unknown; price: unknown }[]): number {
   return items.reduce((sum, it) => sum + num(it.quantity) * num(it.price), 0);

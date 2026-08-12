@@ -12,6 +12,8 @@ export const createTemplateSchema = z.object({
   waLanguage: z.string().optional(),
   waCategory: z.string().nullish(),
   waImage: z.boolean().optional(),
+  waBodyParams: z.string().nullish(), // "customer_name={khách hàng}" hoặc "{khách hàng}, {mã}"
+  sendAsText: z.boolean().optional(), // true = gửi text thường thay vì template Meta
 });
 export type CreateTemplateInput = z.infer<typeof createTemplateSchema>;
 
