@@ -217,6 +217,9 @@ model Template {
   // 1-1: ảnh header do người dùng upload (gửi kèm khi dùng WhatsApp template) — giống bot
   image         TemplateImage?
 
+  // Index hỗ trợ màn Template (tìm kiếm + phân trang):
+  @@index([quotationId]) // lọc/join theo báo giá (search theo mã báo giá, listByQuotation, pool)
+  @@index([createdAt]) // orderBy createdAt desc khi phân trang
   @@map("templates")
 }
 
@@ -274,6 +277,9 @@ model Customer {
   // 1-N: customer -> tin nhắn khách trả lời (khớp theo SĐT lúc nhận webhook)
   inboundMessages InboundMessage[]
 
+  // Index hỗ trợ màn Khách hàng (tìm kiếm + lọc + phân trang):
+  @@index([market]) // lọc theo quốc gia + dropdown distinct market
+  @@index([name]) // orderBy name asc khi phân trang
   @@map("customers")
 }
 
@@ -359,6 +365,8 @@ model SendJob {
   customer Customer? @relation(fields: [customerId], references: [id])
 
   @@index([status])
+  @@index([batchId]) // worker query/count theo batch (luồng gửi nóng nhất)
+  @@index([createdAt]) // listSendJobs (lọc + orderBy desc) & cleanupSendJobs (deleteMany theo createdAt)
   @@map("send_jobs")
 }
 
@@ -377,6 +385,25 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
+// KÊNH NHẬN: tài khoản/ số dùng để NHẬN tin khách (webhook). Song song với Channel (kênh gửi).
+// Cùng cấu trúc: DB chỉ lưu TÊN biến env (api_key_env) chứa verify token, KHÔNG lưu giá trị thật.
+model ReceiveChannel {
+  id        BigInt    @id @default(autoincrement())
+  name      String    @db.VarChar(150) // tên hiển thị, vd "WhatsApp AGO nhận"
+  type      String    @db.VarChar(20) // TELEGRAM | ZALO | WHATSAPP
+  accountId String    @map("account_id") @db.VarChar(255) // id tài khoản NHẬN (phone_number_id / OA id / bot id)
+  apiKeyEnv String    @map("api_key_env") @db.VarChar(100) // TÊN biến env chứa verify token / token (KHÔNG phải giá trị)
+  isActive  Boolean   @default(true) @map("is_active")
+  note      String?   @db.Text
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  inboundMessages InboundMessage[]
+
+  @@unique([type, accountId]) // tránh trùng 1 tài khoản nhận trên cùng nền tảng
+  @@map("receive_channels")
+}
+
 // Tin nhắn KHÁCH TRẢ LỜI (đến từ webhook WhatsApp). Khớp customer theo SĐT.
 // kind: message = khách nhắn thường; flow_response = khách bấm nút Flow (đặt lịch...).
 model InboundMessage {
@@ -384,6 +411,7 @@ model InboundMessage {
   waMessageId String?  @unique @map("wa_message_id") @db.VarChar(255) // chống trùng khi Meta gửi lại
   fromPhone   String   @map("from_phone") @db.VarChar(30)
   customerId  BigInt?  @map("customer_id")
+  receiveChannelId BigInt? @map("receive_channel_id") // kênh nhận (khớp theo phone_number_id của Meta)
   channel     String   @default("WHATSAPP") @db.VarChar(20)
   kind        String   @default("message") @db.VarChar(20) // message | flow_response
   type        String?  @db.VarChar(30) // text | interactive | button | image...
@@ -391,9 +419,11 @@ model InboundMessage {
   raw         Json? // payload gốc để soi khi cần
   receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamp(6)
 
-  customer Customer? @relation(fields: [customerId], references: [id])
+  customer       Customer?       @relation(fields: [customerId], references: [id])
+  receiveChannel ReceiveChannel? @relation(fields: [receiveChannelId], references: [id], onDelete: SetNull)
 
   @@index([receivedAt])
   @@index([customerId])
+  @@index([receiveChannelId])
   @@map("inbound_messages")
 }

@@ -11,7 +11,7 @@ import {
   sendJSON,
 } from "@/components/common/api";
 import { toast } from "sonner";
-import TemplateQuotationCard, { type TplQuotation } from "./TemplateQuotationCard";
+import { type TplQuotation } from "./TemplateQuotationCard";
 
 type Tpl = {
   id: string;
@@ -25,6 +25,7 @@ type Tpl = {
 type TplDetail = {
   id: string;
   name: string;
+  subject: string | null; // tên sản phẩm
   icon: string | null;
   body: string | null;
   waTemplateName: string | null;
@@ -54,6 +55,7 @@ type Ch = { id: string; name: string; type: string };
 type TplForm = {
   id?: string;
   name: string;
+  subject: string; // tên sản phẩm
   icon: string;
   body: string;
   channelId: string;
@@ -139,22 +141,35 @@ export default function TemplatesScreen() {
   const [channels, setChannels] = useState<Ch[]>([]);
   const [form, setForm] = useState<TplForm | null>(null); // tạo/sửa template
   const [delT, setDelT] = useState<{ id: string; name: string } | null>(null); // xác nhận xóa template
-  const [search, setSearch] = useState(""); // tìm kiếm danh sách
+  const [search, setSearch] = useState(""); // ô nhập tìm kiếm danh sách
+  const [debouncedSearch, setDebouncedSearch] = useState(""); // từ khoá đã debounce -> gọi API
   const [lpage, setLpage] = useState(1); // trang danh sách
+  const [total, setTotal] = useState(0); // tổng số template khớp (server trả về)
   const [err, setErr] = useState("");
 
+  // Danh sách template phân trang server-side — chịu được nhiều template (vd 1000).
   const loadTemplates = useCallback(async () => {
     try {
-      setTemplates(await getJSON<Tpl[]>("/api/templates"));
+      const r = await getJSON<{ items: Tpl[]; total: number }>(
+        `/api/templates?page=${lpage}&limit=12&search=${encodeURIComponent(debouncedSearch)}`,
+      );
+      setTemplates(r.items);
+      setTotal(r.total);
     } catch (e) {
       setErr((e as Error).message);
     }
-  }, []);
+  }, [lpage, debouncedSearch]);
   useEffect(() => {
     (async () => {
       await loadTemplates();
     })();
   }, [loadTemplates]);
+
+  // Debounce ô tìm kiếm: gõ xong 300ms mới gọi API (tránh gọi liên tục theo từng ký tự).
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
 
   const loadDetail = useCallback(async (id: string) => {
     try {
@@ -220,6 +235,7 @@ export default function TemplatesScreen() {
       .catch(() => {});
     setForm({
       name: "",
+      subject: "",
       icon: "🌐",
       body: "",
       channelId: "",
@@ -240,6 +256,7 @@ export default function TemplatesScreen() {
     setForm({
       id: detail.id,
       name: detail.name,
+      subject: detail.subject || "",
       icon: detail.icon || "🌐",
       body: detail.body || "",
       channelId: detail.channel?.id || "",
@@ -253,6 +270,7 @@ export default function TemplatesScreen() {
   }
   async function saveForm() {
     if (!form?.name) return toast.error("Nhập tên hiển thị");
+    if (!form?.subject?.trim()) return toast.error("Nhập tên sản phẩm");
     if (!form?.channelId) return toast.error("Chọn kênh gửi");
     const selCh = channels.find((c) => c.id === form.channelId);
     const chType = (selCh?.type || "").toUpperCase();
@@ -263,6 +281,7 @@ export default function TemplatesScreen() {
     const editing = !!form.id;
     const body = {
       name: form.name,
+      subject: form.subject,
       icon: form.icon,
       body: form.body,
       channelId: form.channelId || null,
@@ -437,6 +456,19 @@ export default function TemplatesScreen() {
             </label>
           </div>
         </div>
+        {/* Tên sản phẩm — hiển thị ở bảng sản phẩm khi gửi báo giá */}
+        <label
+          style={sx("display:flex; flex-direction:column; margin-bottom:12px")}
+        >
+          <span style={sx(lbl)}>Tên sản phẩm *</span>
+          <HInput
+            s={inp}
+            focus={focus}
+            value={form.subject}
+            onChange={(e) => setForm({ ...form, subject: e.target.value })}
+            placeholder="VD: Thanh long ruột đỏ"
+          />
+        </label>
         {/* Kênh gửi chọn TRƯỚC — quyết định loại template (WhatsApp/Zalo khác nhau) */}
         <label
           style={sx("display:flex; flex-direction:column; margin-bottom:12px")}
@@ -635,16 +667,7 @@ export default function TemplatesScreen() {
 
   // ---------- DANH SÁCH TEMPLATE ----------
   if (!selT) {
-    const kw = search.trim().toLowerCase();
-    const filtered = templates.filter(
-      (t) =>
-        !kw ||
-        t.name.toLowerCase().includes(kw) ||
-        (t.quotation?.code || "").toLowerCase().includes(kw),
-    );
-    const lTotal = Math.max(1, Math.ceil(filtered.length / 12));
-    const lCur = Math.min(lpage, lTotal);
-    const lPaged = filtered.slice((lCur - 1) * 12, lCur * 12);
+    const lTotal = Math.max(1, Math.ceil(total / 12));
     return (
       <div>
         {errBox}
@@ -673,17 +696,17 @@ export default function TemplatesScreen() {
             />
           </div>
           <div style={sx("font-size:13px; color:#7B8A80; flex:1")}>
-            {filtered.length} template
+            {total} template
           </div>
           <HButton s={green} onClick={openCreate}>
             + Tạo template
           </HButton>
         </div>
-        {filtered.length === 0 && (
+        {total === 0 && (
           <div style={sx(card + "; font-size:13px; color:#8B9A90")}>
-            {templates.length === 0
-              ? "Chưa có template. Bấm “+ Tạo template” để tạo mới."
-              : "Không tìm thấy template khớp."}
+            {debouncedSearch
+              ? "Không tìm thấy template khớp."
+              : "Chưa có template. Bấm “+ Tạo template” để tạo mới."}
           </div>
         )}
         <div
@@ -691,7 +714,7 @@ export default function TemplatesScreen() {
             "display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px",
           )}
         >
-          {lPaged.map((t) => (
+          {templates.map((t) => (
             <HButton
               key={t.id}
               onClick={() => openDetail(t.id)}
@@ -735,17 +758,17 @@ export default function TemplatesScreen() {
             )}
           >
             <div style={sx("font-size:12.5px; color:#7B8A80; flex:1")}>
-              Trang {lCur}/{lTotal}
+              Trang {lpage}/{lTotal}
             </div>
             <HButton
-              s={`${ghost} ${lCur <= 1 ? "opacity:.45; pointer-events:none" : ""}`}
-              onClick={() => setLpage(lCur - 1)}
+              s={`${ghost} ${lpage <= 1 ? "opacity:.45; pointer-events:none" : ""}`}
+              onClick={() => setLpage((p) => Math.max(1, p - 1))}
             >
               ‹ Trước
             </HButton>
             <HButton
-              s={`${ghost} ${lCur >= lTotal ? "opacity:.45; pointer-events:none" : ""}`}
-              onClick={() => setLpage(lCur + 1)}
+              s={`${ghost} ${lpage >= lTotal ? "opacity:.45; pointer-events:none" : ""}`}
+              onClick={() => setLpage((p) => p + 1)}
             >
               Sau ›
             </HButton>
@@ -850,19 +873,16 @@ export default function TemplatesScreen() {
           sub={`${activeCount} ACTIVE · ${receiveCount} nhận báo giá`}
         />
         <Stat
+          label="Tên sản phẩm"
+          value={detail?.subject || "—"}
+        />
+        <Stat
           label="Ngày tạo"
           value={detail ? fmtDate(detail.createdAt) : "—"}
         />
       </div>
 
-      {/* Báo giá của template (bảng giá gửi đi) */}
-      {detail && (
-        <TemplateQuotationCard
-          templateId={detail.id}
-          quotation={detail.quotation}
-          onChanged={refresh}
-        />
-      )}
+      {/* Phần "Báo giá" đã ẩn theo yêu cầu — template vẫn tự có báo giá mặc định khi tạo. */}
 
       {/* Nội dung tin nhắn + Ảnh báo giá */}
       <div

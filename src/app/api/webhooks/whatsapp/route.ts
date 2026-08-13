@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordInbound, summarizeMessage, updateDeliveryStatus } from "@/server/services/inboundService";
+import { notifyInboundReply } from "@/server/services/notificationService";
+import { findReceiveChannelId } from "@/server/services/receiveChannelService";
 
 // Webhook WhatsApp (Meta gọi vào). Cần URL public + khai ở Meta App Dashboard:
 //   Callback URL: https://<domain>/api/webhooks/whatsapp
@@ -39,6 +41,10 @@ export async function POST(req: NextRequest) {
       for (const change of changes) {
         const value = ((change as { value?: unknown }).value || {}) as Record<string, unknown>;
 
+        // Kênh nhận: khớp theo phone_number_id của Meta (số nào đã nhận tin này). Không khớp -> null.
+        const metadata = (value.metadata || {}) as Record<string, unknown>;
+        const receiveChannelId = await findReceiveChannelId("WHATSAPP", String(metadata.phone_number_id || ""));
+
         // Trạng thái gửi: sent/delivered/read/failed -> cập nhật send_jobs theo messageId.
         const statuses = Array.isArray(value.statuses) ? (value.statuses as Record<string, unknown>[]) : [];
         for (const st of statuses) {
@@ -51,14 +57,17 @@ export async function POST(req: NextRequest) {
         const messages = Array.isArray(value.messages) ? (value.messages as Record<string, unknown>[]) : [];
         for (const m of messages) {
           const s = summarizeMessage(m);
-          await recordInbound({
+          const saved = await recordInbound({
             waMessageId: String(m?.id || "") || null,
             fromPhone: String(m?.from || ""),
             kind: s.kind,
             type: s.type,
             text: s.text,
             raw: m,
+            receiveChannelId,
           });
+          // Tin MỚI (không trùng) -> báo sếp qua Zalo (no-op nếu chưa cấu hình; không ném lỗi).
+          if (saved) await notifyInboundReply(saved);
         }
       }
     }

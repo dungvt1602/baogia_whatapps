@@ -74,13 +74,11 @@ export async function previewSend(params: {
     },
   });
   if (!template) throw new Error("Không tìm thấy template.");
-  if (!template.quotation) throw new Error("Template chưa gắn với báo giá nào.");
+  if (!template.quotation) throw new Error("Template này chưa gắn báo giá nên chưa gửi được. Mở chi tiết template để gắn báo giá.");
 
   const recipients = eligible(template.customerLinks.map((l) => l.customer));
   if (recipients.length === 0) {
-    throw new Error(
-      "Không có khách ACTIVE + nhận báo giá cho template này. (điều kiện: STATUS=ACTIVE, receiveQuotation=true)",
-    );
+    throw new Error("Template này chưa có khách hàng đủ điều kiện nhận. Khách cần đang hoạt động và bật nhận báo giá.");
   }
 
   // Kênh: ưu tiên channelId truyền vào, sau đó kênh mặc định của template.
@@ -118,7 +116,7 @@ export async function previewSend(params: {
   return {
     batch,
     channel,
-    template: { id: template.id, name: template.name, body: template.body },
+    template: { id: template.id, name: template.name, body: template.body, productName: template.subject, createdAt: template.createdAt },
     quotation: {
       code: q.code,
       title: q.title,
@@ -166,10 +164,10 @@ export async function confirmSend(params: {
   if (["QUEUED", "SENDING", "SENT"].includes(batch.status)) {
     throw new Error(`Lệnh ${batch.code} đã ở hàng đợi hoặc đã gửi.`);
   }
-  if (!batch.template.quotation) throw new Error("Template chưa gắn báo giá.");
+  if (!batch.template.quotation) throw new Error("Template này chưa gắn báo giá nên chưa gửi được.");
 
   const recipients = eligible(batch.template.customerLinks.map((l) => l.customer));
-  if (recipients.length === 0) throw new Error("Không có khách hợp lệ để gửi.");
+  if (recipients.length === 0) throw new Error("Template này chưa có khách hàng đủ điều kiện nhận.");
 
   const channel = batch.channel || batch.template.channel;
   const channelType = (channel?.type || "WHATSAPP").toUpperCase();

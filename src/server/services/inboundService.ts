@@ -47,23 +47,28 @@ export async function recordInbound(input: {
   type?: string | null;
   text?: string | null;
   raw?: unknown;
-}): Promise<void> {
+  receiveChannelId?: bigint | null; // kênh nhận đã khớp (theo phone_number_id)
+}) {
   const customerId = await matchCustomerId(input.fromPhone);
   try {
-    await prisma.inboundMessage.create({
+    // Trả bản ghi vừa tạo (kèm tên/công ty khách) để báo sếp. Null nếu trùng (đã lưu trước đó).
+    return await prisma.inboundMessage.create({
       data: {
         waMessageId: input.waMessageId ?? null,
         fromPhone: input.fromPhone,
         customerId,
+        receiveChannelId: input.receiveChannelId ?? null,
         kind: input.kind,
         type: input.type ?? null,
         text: input.text ?? null,
         raw: (input.raw as never) ?? undefined,
       },
+      include: { customer: { select: { name: true, company: true } } },
     });
   } catch (err) {
-    // Trùng waMessageId (unique) -> bỏ qua, không phá webhook.
-    if (!(err instanceof Error && err.message.includes("Unique"))) throw err;
+    // Trùng waMessageId (unique) -> đã lưu trước đó, bỏ qua (không báo trùng, không phá webhook).
+    if (err instanceof Error && err.message.includes("Unique")) return null;
+    throw err;
   }
 }
 
@@ -83,7 +88,10 @@ export function listInbound(limit = 200) {
   return prisma.inboundMessage.findMany({
     orderBy: { receivedAt: "desc" },
     take: limit,
-    include: { customer: { select: { name: true, company: true } } },
+    include: {
+      customer: { select: { name: true, company: true } },
+      receiveChannel: { select: { name: true, type: true } },
+    },
   });
 }
 
