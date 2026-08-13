@@ -11,6 +11,7 @@ export const PATHS: Record<string, string> = {
   send: "/gui-bao-gia",
   team: "/nguoi-dung",
   channels: "/kenh-gui",
+  receiveChannels: "/kenh-nhan",
   logs: "/nhat-ky",
   sendjobs: "/log-gui",
   inbox: "/phan-hoi",

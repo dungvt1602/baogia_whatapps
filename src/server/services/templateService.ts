@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/server/db/prisma";
+import { createQuotation } from "@/server/services/quotationService";
 import type { CreateTemplateInput, UpdateTemplateInput } from "@/server/validation/template.schema";
 
 export function listTemplates() {
@@ -11,6 +12,43 @@ export function listTemplates() {
       _count: { select: { customerLinks: true } },
     },
   });
+}
+
+// Danh sách template có phân trang + tìm kiếm (tên / tên template Meta / mã báo giá).
+// Chịu được số lượng lớn (vd 1000 template) vì chỉ tải đúng 1 trang từ DB.
+// Trả { items, total, page, limit }.
+export async function listTemplatesPaged(params: {
+  search?: string | null;
+  page?: number;
+  limit?: number;
+}) {
+  const kw = (params.search || "").trim();
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.min(100, Math.max(1, params.limit || 12));
+  const where = kw
+    ? {
+        OR: [
+          { name: { contains: kw, mode: "insensitive" as const } },
+          { waTemplateName: { contains: kw, mode: "insensitive" as const } },
+          { quotation: { code: { contains: kw, mode: "insensitive" as const } } },
+        ],
+      }
+    : {};
+  const [items, total] = await Promise.all([
+    prisma.template.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        quotation: { select: { id: true, code: true, title: true } },
+        channel: { select: { id: true, name: true, type: true } },
+        _count: { select: { customerLinks: true } },
+      },
+    }),
+    prisma.template.count({ where }),
+  ]);
+  return { items, total, page, limit };
 }
 
 export function getTemplateDetail(id: string) {
@@ -85,11 +123,18 @@ export function createTemplate(quotationId: string, input: CreateTemplateInput) 
   });
 }
 
-// Tạo template trong kho (chưa gắn báo giá) — dùng ở menu Template.
-export function createStandaloneTemplate(input: CreateTemplateInput) {
+// Tạo template — TỰ gắn kèm 1 báo giá mặc định (rỗng) để gửi được ngay, không phải
+// vào chi tiết template gắn báo giá thủ công. Mỗi template có bảng giá riêng; sửa
+// mặt hàng/giá của báo giá này trong trang chi tiết template.
+export async function createStandaloneTemplate(input: CreateTemplateInput) {
+  const quotation = await createQuotation({
+    title: input.name ? `Báo giá ${input.name}` : null,
+  });
   return prisma.template.create({
     data: {
+      quotationId: quotation.id,
       name: input.name,
+      subject: input.subject ?? null, // tên sản phẩm
       icon: input.icon ?? null,
       body: input.body ?? input.content ?? null,
       channelId: input.channelId ? BigInt(input.channelId) : null,
@@ -128,6 +173,7 @@ export async function listTemplateCustomers(templateId: string) {
 export function updateTemplate(id: string, input: UpdateTemplateInput) {
   const data: Record<string, unknown> = {};
   if (input.name !== undefined) data.name = input.name;
+  if (input.subject !== undefined) data.subject = input.subject ?? null; // tên sản phẩm
   if (input.icon !== undefined) data.icon = input.icon;
   if (input.body !== undefined || input.content !== undefined) data.body = input.body ?? input.content ?? null;
   if (input.channelId !== undefined) data.channelId = input.channelId ? BigInt(input.channelId) : null;

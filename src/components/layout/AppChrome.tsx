@@ -32,13 +32,13 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           </HButton>
         </div>
 
-        <div
+        {/* <div
           style={sx(
             "font-size:10.5px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:rgba(255,255,255,.45); padding:22px 12px 10px",
           )}
         >
           Menu
-        </div>
+        </div> */}
 
         <div style={sx("display:flex; flex-direction:column; gap:3px")}>
           {v.navItems.map((item) => (

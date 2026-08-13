@@ -272,8 +272,30 @@ CREATE INDEX "send_batches_status_idx" ON "send_batches"("status");
 -- CreateIndex
 CREATE INDEX "send_jobs_status_idx" ON "send_jobs"("status");
 
+-- CreateIndex (worker gửi + log gửi)
+CREATE INDEX "send_jobs_batch_id_idx" ON "send_jobs"("batch_id");
+CREATE INDEX "send_jobs_created_at_idx" ON "send_jobs"("created_at");
+
 -- CreateIndex
 CREATE INDEX "activity_logs_created_at_idx" ON "activity_logs"("created_at");
+
+-- CreateIndex (hỗ trợ tìm/lọc/phân trang màn Template)
+CREATE INDEX "templates_quotation_id_idx" ON "templates"("quotation_id");
+CREATE INDEX "templates_created_at_idx" ON "templates"("created_at");
+
+-- CreateIndex (hỗ trợ tìm/lọc/phân trang màn Khách hàng)
+CREATE INDEX "customers_market_idx" ON "customers"("market");
+CREATE INDEX "customers_name_idx" ON "customers"("name");
+
+-- Tìm kiếm text nhanh (ILIKE '%...%') — B-tree không giúp được, cần GIN + pg_trgm.
+-- Prisma schema không khai được -> chạy SQL tay (bỏ comment để dùng):
+-- CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- CREATE INDEX IF NOT EXISTS "templates_name_trgm" ON "templates" USING gin ("name" gin_trgm_ops);
+-- CREATE INDEX IF NOT EXISTS "templates_wa_template_name_trgm" ON "templates" USING gin ("wa_template_name" gin_trgm_ops);
+-- CREATE INDEX IF NOT EXISTS "customers_name_trgm" ON "customers" USING gin ("name" gin_trgm_ops);
+-- CREATE INDEX IF NOT EXISTS "customers_phone_trgm" ON "customers" USING gin ("phone" gin_trgm_ops);
+-- CREATE INDEX IF NOT EXISTS "customers_whatsapp_phone_trgm" ON "customers" USING gin ("whatsapp_phone" gin_trgm_ops);
+-- CREATE INDEX IF NOT EXISTS "customers_email_trgm" ON "customers" USING gin ("email" gin_trgm_ops);
 
 -- AddForeignKey
 ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -329,3 +351,34 @@ ALTER TABLE "send_jobs" ADD CONSTRAINT "send_jobs_batch_id_fkey" FOREIGN KEY ("b
 -- AddForeignKey
 ALTER TABLE "send_jobs" ADD CONSTRAINT "send_jobs_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "customers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
+
+-- ============================================================
+-- KÊNH NHẬN (receive_channels) + gắn vào inbound_messages
+-- Chạy 1 lần trên Supabase SQL Editor (vì db push đang chặn port 5432).
+-- Idempotent: chạy lại nhiều lần không lỗi.
+-- ============================================================
+
+-- CreateTable
+CREATE TABLE IF NOT EXISTS "receive_channels" (
+    "id" BIGSERIAL NOT NULL,
+    "name" VARCHAR(150) NOT NULL,
+    "type" VARCHAR(20) NOT NULL,
+    "account_id" VARCHAR(255) NOT NULL,
+    "api_key_env" VARCHAR(100) NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "note" TEXT,
+    "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(6),
+    CONSTRAINT "receive_channels_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "receive_channels_type_account_id_key" ON "receive_channels"("type", "account_id");
+
+-- AlterTable: thêm cột kênh nhận cho inbound_messages
+ALTER TABLE "inbound_messages" ADD COLUMN IF NOT EXISTS "receive_channel_id" BIGINT;
+CREATE INDEX IF NOT EXISTS "inbound_messages_receive_channel_id_idx" ON "inbound_messages"("receive_channel_id");
+
+-- AddForeignKey (Postgres không có IF NOT EXISTS cho constraint -> bọc DO block)
+DO $$ BEGIN
+  ALTER TABLE "inbound_messages" ADD CONSTRAINT "inbound_messages_receive_channel_id_fkey"
+    FOREIGN KEY ("receive_channel_id") REFERENCES "receive_channels"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
