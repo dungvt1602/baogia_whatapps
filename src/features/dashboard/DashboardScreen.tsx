@@ -16,6 +16,8 @@ type Activity = {
 type Reply = {
   id: string;
   fromPhone: string;
+  fromName: string | null;
+  channel: string;
   kind: string;
   type: string | null;
   text: string | null;
@@ -213,7 +215,7 @@ export default function DashboardScreen() {
                       "width:36px; height:36px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; flex-shrink:0",
                     )}
                   >
-                    {(r.customer?.name || "?").trim().charAt(0).toUpperCase()}
+                    {(r.customer?.name || r.fromName || "?").trim().charAt(0).toUpperCase()}
                   </div>
                   <div style={sx("min-width:0; flex:1")}>
                     <div
@@ -226,7 +228,7 @@ export default function DashboardScreen() {
                           "font-size:13.5px; color:#14261A; font-weight:700",
                         )}
                       >
-                        {r.customer?.name || r.fromPhone}
+                        {r.customer?.name || r.fromName || r.fromPhone}
                       </span>
                       {r.customer?.company && (
                         <span style={sx("font-size:12px; color:#7B8A80")}>

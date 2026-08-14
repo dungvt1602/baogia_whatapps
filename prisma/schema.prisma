@@ -409,7 +409,8 @@ model ReceiveChannel {
 model InboundMessage {
   id          BigInt   @id @default(autoincrement())
   waMessageId String?  @unique @map("wa_message_id") @db.VarChar(255) // chống trùng khi Meta gửi lại
-  fromPhone   String   @map("from_phone") @db.VarChar(30)
+  fromPhone   String   @map("from_phone") @db.VarChar(30) // WhatsApp: SĐT; Zalo: user_id (UID)
+  fromName    String?  @map("from_name") @db.VarChar(255) // tên hiển thị (Zalo lấy qua getprofile vì không có SĐT)
   customerId  BigInt?  @map("customer_id")
   receiveChannelId BigInt? @map("receive_channel_id") // kênh nhận (khớp theo phone_number_id của Meta)
   channel     String   @default("WHATSAPP") @db.VarChar(20)

@@ -42,20 +42,26 @@ export function summarizeMessage(m: Record<string, unknown>): { kind: string; ty
 // Lưu 1 tin khách trả lời (idempotent theo waMessageId — Meta hay gửi lại).
 export async function recordInbound(input: {
   waMessageId?: string | null;
-  fromPhone: string;
+  fromPhone: string; // WhatsApp: SĐT; Zalo: user_id
+  fromName?: string | null; // tên hiển thị (Zalo)
+  channel?: string; // WHATSAPP | ZALO (mặc định WHATSAPP)
   kind: string;
   type?: string | null;
   text?: string | null;
   raw?: unknown;
-  receiveChannelId?: bigint | null; // kênh nhận đã khớp (theo phone_number_id)
+  receiveChannelId?: bigint | null; // kênh nhận đã khớp
 }) {
-  const customerId = await matchCustomerId(input.fromPhone);
+  const channel = (input.channel || "WHATSAPP").toUpperCase();
+  // Chỉ WhatsApp mới khớp khách theo SĐT. Zalo cho user_id (UID) nên bỏ qua (tránh khớp nhầm).
+  const customerId = channel === "WHATSAPP" ? await matchCustomerId(input.fromPhone) : null;
   try {
     // Trả bản ghi vừa tạo (kèm tên/công ty khách) để báo sếp. Null nếu trùng (đã lưu trước đó).
     return await prisma.inboundMessage.create({
       data: {
         waMessageId: input.waMessageId ?? null,
         fromPhone: input.fromPhone,
+        fromName: input.fromName ?? null,
+        channel,
         customerId,
         receiveChannelId: input.receiveChannelId ?? null,
         kind: input.kind,
@@ -63,7 +69,7 @@ export async function recordInbound(input: {
         text: input.text ?? null,
         raw: (input.raw as never) ?? undefined,
       },
-      include: { customer: { select: { name: true, company: true } } },
+      include: { customer: { select: { name: true, company: true, market: true } } },
     });
   } catch (err) {
     // Trùng waMessageId (unique) -> đã lưu trước đó, bỏ qua (không báo trùng, không phá webhook).
@@ -94,6 +100,7 @@ export function listInbound(limit = 200) {
     },
   });
 }
+// (fromName, channel là field scalar nên tự có trong kết quả trên — không cần select thêm)
 
 // Dọn phản hồi khách: xóa HẾT bản ghi quá `days` ngày (giống send_jobs, tránh phình DB).
 export async function cleanupInbound(days = 3) {

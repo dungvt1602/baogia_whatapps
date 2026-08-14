@@ -8,6 +8,8 @@ import { getSupabaseBrowser } from "@/components/common/supabase";
 type Reply = {
   id: string;
   fromPhone: string;
+  fromName: string | null;
+  channel: string;
   kind: string;
   type: string | null;
   text: string | null;
@@ -68,7 +70,7 @@ export default function InboxScreen() {
   const view = useMemo(() => {
     const kw = q.trim().toLowerCase();
     if (!kw) return rows;
-    return rows.filter((r) => [r.customer?.name, r.customer?.company, r.fromPhone, r.text, r.receiveChannel?.name].some((v) => (v || "").toLowerCase().includes(kw)));
+    return rows.filter((r) => [r.customer?.name, r.fromName, r.customer?.company, r.fromPhone, r.text, r.receiveChannel?.name].some((v) => (v || "").toLowerCase().includes(kw)));
   }, [rows, q]);
 
   const totalPages = Math.max(1, Math.ceil(view.length / PER));
@@ -113,7 +115,7 @@ export default function InboxScreen() {
             {paged.map((r, i) => (
               <tr key={r.id} style={sx(`background:${i % 2 ? "#FBFDFB" : "#fff"}`)}>
                 <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(curPage - 1) * PER + i + 1}</td>
-                <td style={sx(gtd + "; font-weight:600; white-space:nowrap")}>{r.customer?.name || <span style={sx("color:#8B9A90; font-weight:400")}>{r.fromPhone} (lạ)</span>}</td>
+                <td style={sx(gtd + "; font-weight:600; white-space:nowrap")}>{r.customer?.name || r.fromName || <span style={sx("color:#8B9A90; font-weight:400")}>{r.fromPhone} (lạ)</span>}</td>
                 <td style={sx(gtd + "; white-space:nowrap")}>{r.customer?.company || "—"}</td>
                 <td style={sx(gtd + "; white-space:nowrap; color:#4A5A4E")}>{r.fromPhone}</td>
                 <td style={sx(gtd + "; white-space:nowrap")}>{r.receiveChannel?.name || <span style={sx("color:#B9C5BC")}>—</span>}</td>
