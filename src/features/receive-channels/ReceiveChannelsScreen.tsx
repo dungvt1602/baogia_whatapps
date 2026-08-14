@@ -26,7 +26,7 @@ const ghost = "border:1px solid #DCE3DC; border-radius:8px; background:#fff; col
 const lbl = "font-size:12px; font-weight:600; color:#3C4A40; margin-bottom:4px";
 const gth = "padding:7px 10px; font-size:11.5px; font-weight:700; color:#33475B; background:#EEF2F5; border:1px solid #D3DCE3; white-space:nowrap; user-select:none; text-align:left; position:sticky; top:0";
 const gtd = "padding:6px 10px; font-size:12.5px; color:#1B2A20; border:1px solid #E4EAEF; white-space:nowrap; background:inherit";
-const empty = (): Form => ({ name: "", type: "WHATSAPP", accountId: "", apiKeyEnv: "", note: "", isActive: true });
+const empty = (): Form => ({ name: "", type: "TELEGRAM", accountId: "", apiKeyEnv: "", note: "", isActive: true });
 
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string }) {
   return (
@@ -78,8 +78,8 @@ export default function ReceiveChannelsScreen() {
   function openEdit(c: Channel) { setForm({ id: c.id, name: c.name, type: c.type, accountId: c.accountId, apiKeyEnv: c.apiKeyEnv, note: c.note || "", isActive: c.isActive }); }
   async function save() {
     if (!form?.name) return toast.error("Nhập tên kênh");
-    if (!form?.accountId) return toast.error("Nhập account id (phone number id nhận)");
-    if (!form?.apiKeyEnv) return toast.error("Nhập tên biến env (verify token)");
+    if (!form?.accountId) return toast.error("Nhập chat id / user id người nhận");
+    if (!form?.apiKeyEnv) return toast.error("Nhập tên biến env (token bot)");
     const editing = !!form.id;
     try {
       if (form.id) await patchJSON(`/api/receive-channels/${form.id}`, form);
@@ -106,7 +106,7 @@ export default function ReceiveChannelsScreen() {
   }
 
   const cols: { key: SortKey; label: string }[] = [
-    { key: "name", label: "Tên kênh" }, { key: "type", label: "Loại" }, { key: "accountId", label: "Account ID (nhận)" }, { key: "apiKeyEnv", label: "Biến verify token (.env)" },
+    { key: "name", label: "Tên kênh" }, { key: "type", label: "Loại" }, { key: "accountId", label: "Người nhận (chat/user id)" }, { key: "apiKeyEnv", label: "Biến env token (.env)" },
   ];
 
   return (
@@ -170,7 +170,7 @@ export default function ReceiveChannelsScreen() {
         <HButton s={`${ghost} ${curPage <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage - 1)}>‹ Trước</HButton>
         <HButton s={`${ghost} ${curPage >= totalPages ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage + 1)}>Sau ›</HButton>
       </div>
-      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>🔒 DB chỉ lưu <b>tên biến env</b> (verify token), giá trị thật nằm trong file .env. Kênh nhận khớp tin về theo <b>phone_number_id</b> (Account ID) mà Meta gửi kèm webhook.</div>
+      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>🔒 DB chỉ lưu <b>tên biến env</b> chứa token, token thật nằm trong .env/Render. Đây là <b>đích báo sếp</b>: khi khách reply, server đẩy thông báo tới các kênh (Telegram/Zalo) đang bật ở đây.</div>
 
       {form && (
         <div style={sx("position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px")}>
@@ -181,21 +181,20 @@ export default function ReceiveChannelsScreen() {
               <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setForm(null)}>✕</HButton>
             </div>
             <div style={sx("display:flex; gap:10px")}>
-              <div style={sx("flex:1")}><Field label="Tên kênh *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="WhatsApp AGO (nhận)" /></div>
+              <div style={sx("flex:1")}><Field label="Tên kênh *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Sếp Telegram" /></div>
               <div style={sx("width:150px")}>
                 <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
                   <span style={sx(lbl)}>Loại</span>
                   <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={sx(inp)}>
-                    <option value="WHATSAPP">WHATSAPP</option>
                     <option value="TELEGRAM">TELEGRAM</option>
                     <option value="ZALO">ZALO</option>
                   </select>
                 </label>
               </div>
             </div>
-            <Field label="Account ID (nhận) *" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} placeholder="phone_number_id nhận webhook / OA id" />
-            <Field label="Tên biến env (verify token) *" value={form.apiKeyEnv} onChange={(e) => setForm({ ...form, apiKeyEnv: e.target.value.toUpperCase() })} placeholder="WHATSAPP_VERIFY_TOKEN" />
-            <div style={sx("font-size:11.5px; color:#8B9A90; margin:-6px 0 12px")}>Nhập TÊN biến (vd WHATSAPP_VERIFY_TOKEN). Giá trị thật đặt trong file .env.</div>
+            <Field label="Chat ID / User ID người nhận *" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} placeholder="Telegram chat id / Zalo user id của sếp" />
+            <Field label="Tên biến env (token bot) *" value={form.apiKeyEnv} onChange={(e) => setForm({ ...form, apiKeyEnv: e.target.value.toUpperCase() })} placeholder="TELEGRAM_BOT_TOKEN_MAIN" />
+            <div style={sx("font-size:11.5px; color:#8B9A90; margin:-6px 0 12px")}>Nhập TÊN biến (vd TELEGRAM_BOT_TOKEN_MAIN). Token thật đặt trong .env/Render.</div>
             <Field label="Ghi chú" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Tuỳ chọn" />
             <label style={sx("display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer; font-size:13.5px; color:#3C4A40")}>
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} style={sx("cursor:pointer; width:16px; height:16px")} />
@@ -214,7 +213,7 @@ export default function ReceiveChannelsScreen() {
           <div onClick={() => setPending(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
           <div style={sx("position:relative; width:100%; max-width:420px; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
             <div style={sx("font-size:17px; font-weight:700; color:#14261A; margin-bottom:8px")}>Xác nhận xóa</div>
-            <div style={sx("font-size:13.5px; line-height:1.55; color:#4A5A4E; margin-bottom:18px")}>{pending.text} Tin đã nhận gắn kênh này sẽ được gỡ liên kết (không bị xóa). Không thể hoàn tác.</div>
+            <div style={sx("font-size:13.5px; line-height:1.55; color:#4A5A4E; margin-bottom:18px")}>{pending.text} Sau khi xóa, kênh này sẽ không còn nhận thông báo báo sếp. Không thể hoàn tác.</div>
             <div style={sx("display:flex; gap:10px")}>
               <HButton s="flex:1; height:44px; border:none; border-radius:11px; background:#B3261E; color:#fff; font-size:14px; font-weight:600; cursor:pointer" onClick={runPending}>Xóa</HButton>
               <HButton s={`${ghost} height:44px`} onClick={() => setPending(null)}>Hủy</HButton>
@@ -232,7 +231,7 @@ export default function ReceiveChannelsScreen() {
               <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => setDetail(null)}>✕</HButton>
             </div>
             <div style={sx("border:1px solid #E9EEE9; border-radius:12px; overflow:hidden")}>
-              {([["Tên kênh", detail.name], ["Loại", detail.type], ["Account ID (nhận)", detail.accountId], ["Biến verify token", detail.apiKeyEnv], ["Trạng thái", detail.isActive ? "Bật" : "Tắt"], ["Tin đã nhận", String(detail._count?.inboundMessages ?? 0)], ["Ghi chú", detail.note || "—"]] as [string, string][]).map(([k, v], idx) => (
+              {([["Tên kênh", detail.name], ["Loại", detail.type], ["Người nhận (chat/user id)", detail.accountId], ["Biến env token", detail.apiKeyEnv], ["Trạng thái", detail.isActive ? "Bật" : "Tắt"], ["Ghi chú", detail.note || "—"]] as [string, string][]).map(([k, v], idx) => (
                 <div key={k} style={sx(`display:flex; font-size:13px; ${idx ? "border-top:1px solid #EFF3EF" : ""}`)}>
                   <div style={sx("width:130px; flex-shrink:0; padding:9px 12px; background:#F7FAF7; color:#6B7A70; font-weight:600")}>{k}</div>
                   <div style={sx("flex:1; padding:9px 12px; color:#14261A")}>{v}</div>

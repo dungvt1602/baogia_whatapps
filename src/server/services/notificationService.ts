@@ -1,9 +1,12 @@
 import "server-only";
-import { sendZaloText, isZaloConfigured } from "@/server/lib/zalo";
-import { sendTelegramText, isTelegramConfigured } from "@/server/lib/telegram";
+import { prisma } from "@/server/db/prisma";
+import { sendZaloText, sendZaloTo } from "@/server/lib/zalo";
+import { sendTelegramText, sendTelegramTo } from "@/server/lib/telegram";
 
 // Thông báo nội bộ khi có sự kiện (hiện: phản hồi khách mới -> báo sếp).
-// Provider: Telegram (giống bot cũ) + Zalo OA. Kênh nào có cấu hình thì gửi kênh đó.
+// ĐÍCH BÁO SẾP lấy từ bảng receive_channels (đang bật): mỗi dòng = 1 người nhận
+// (type TELEGRAM/ZALO, accountId = chat id/user id, apiKeyEnv = TÊN biến env chứa token).
+// Chưa có dòng nào -> fallback về biến env cũ để không gãy.
 
 type InboundLike = {
   fromPhone: string;
@@ -75,28 +78,41 @@ function formatReply(msg: InboundLike): string {
   ].join("\n");
 }
 
-// Báo sếp khi có phản hồi khách mới — gửi qua MỌI kênh đã cấu hình (Telegram + Zalo).
+// Báo sếp khi có phản hồi khách mới — gửi tới MỌI kênh nhận đang bật (đọc từ DB).
 // KHÔNG BAO GIỜ ném lỗi — được gọi trong webhook, lỗi ở đây không được phá luồng lưu tin / trả 200.
 export async function notifyInboundReply(msg: InboundLike): Promise<void> {
   const text = formatReply(msg);
-  // Chạy song song, độc lập; 1 kênh lỗi không ảnh hưởng kênh kia.
-  await Promise.allSettled([
-    (async () => {
-      try {
-        await sendTelegramText(text);
-      } catch (err) {
-        console.error("[notify] Telegram lỗi:", err);
-      }
-    })(),
-    (async () => {
-      try {
-        await sendZaloText(text);
-      } catch (err) {
-        console.error("[notify] Zalo lỗi:", err);
-      }
-    })(),
-  ]);
-  if (!isTelegramConfigured() && !isZaloConfigured()) {
-    console.warn("[notify] Chưa cấu hình kênh báo sếp nào (Telegram/Zalo) — bỏ qua.");
+
+  let channels: { name: string; type: string; accountId: string; apiKeyEnv: string }[] = [];
+  try {
+    channels = await prisma.receiveChannel.findMany({
+      where: { isActive: true, type: { in: ["TELEGRAM", "ZALO"] } },
+      select: { name: true, type: true, accountId: true, apiKeyEnv: true },
+    });
+  } catch (err) {
+    console.error("[notify] đọc kênh nhận lỗi:", err);
   }
+
+  // Chưa cấu hình kênh nào trong DB -> fallback về env cũ (Telegram + Zalo mặc định).
+  if (channels.length === 0) {
+    await Promise.allSettled([sendTelegramText(text), sendZaloText(text)]);
+    return;
+  }
+
+  await Promise.allSettled(
+    channels.map(async (c) => {
+      const token = process.env[c.apiKeyEnv];
+      if (!token) {
+        console.warn(`[notify] kênh "${c.name}": thiếu biến env ${c.apiKeyEnv} — bỏ qua.`);
+        return;
+      }
+      try {
+        const type = c.type.toUpperCase();
+        if (type === "TELEGRAM") await sendTelegramTo(token, c.accountId, text);
+        else if (type === "ZALO") await sendZaloTo(token, c.accountId, text);
+      } catch (err) {
+        console.error(`[notify] kênh "${c.name}" lỗi:`, err);
+      }
+    }),
+  );
 }

@@ -134,7 +134,7 @@ export function useAgo() {
     customers: ["Khách hàng", "Danh sách khách hàng nhận báo giá"],
     team: ["Quản trị người dùng", "Duyệt tài khoản mới và phân quyền"],
     channels: ["Kênh gửi báo giá", "Kết nối WhatsApp, Zalo và Telegram"],
-    receiveChannels: ["Kênh nhận", "Tài khoản/số dùng để nhận tin khách qua webhook"],
+    receiveChannels: ["Kênh nhận", "Đích báo sếp — Telegram/Zalo nhận thông báo khi khách reply"],
     logs: ["Nhật ký hoạt động", "Toàn bộ thao tác trên hệ thống"],
     sendjobs: ["Log gửi", "Chi tiết từng khách đã gửi — trạng thái, message id, lỗi"],
     inbox: ["Phản hồi khách", "Tin khách trả lời qua WhatsApp — ai trả lời, nội dung gì"],

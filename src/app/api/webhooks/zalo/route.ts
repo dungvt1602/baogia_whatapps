@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordInbound } from "@/server/services/inboundService";
 import { notifyInboundReply } from "@/server/services/notificationService";
-import { findReceiveChannelId } from "@/server/services/receiveChannelService";
 import { verifyZaloSignature, getZaloProfile } from "@/server/lib/zalo";
 
 // Webhook Zalo OA (Zalo gọi vào). Khai ở Zalo Developers -> app -> Webhook:
@@ -49,15 +48,12 @@ export async function POST(req: NextRequest) {
     // Chỉ xử lý tin do USER gửi tới OA (bỏ qua follow, oa_send... để không lưu rác).
     if (eventName.startsWith("user_send")) {
       const sender = (body?.sender || {}) as Record<string, unknown>;
-      const recipient = (body?.recipient || {}) as Record<string, unknown>;
       const message = (body?.message || {}) as Record<string, unknown>;
       const uid = String(sender?.id || "");
-      const oaId = String(recipient?.id || "");
       const msgId = String(message?.msg_id || "") || null;
 
       if (uid) {
         const fromName = await getZaloProfile(uid); // tên hiển thị (webhook không có SĐT)
-        const receiveChannelId = await findReceiveChannelId("ZALO", oaId);
         const saved = await recordInbound({
           waMessageId: msgId, // dùng làm khoá chống trùng
           fromPhone: uid, // Zalo: lưu UID vào đây
@@ -67,7 +63,6 @@ export async function POST(req: NextRequest) {
           type: eventName,
           text: summarizeZalo(eventName, message),
           raw: body,
-          receiveChannelId,
         });
         if (saved) await notifyInboundReply(saved);
       }

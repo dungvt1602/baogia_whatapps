@@ -27,6 +27,27 @@ export function isZaloConfigured(): boolean {
   return !!process.env.ZALO_OA_TOKEN_MAIN && recipients().length > 0;
 }
 
+// Gửi tới 1 user_id cụ thể bằng token truyền vào (dùng cho kênh nhận cấu hình trong DB).
+export async function sendZaloTo(token: string, userId: string, text: string): Promise<ZaloResult> {
+  if (!token || !userId) return { ok: false, skipped: true };
+  try {
+    const res = await fetch(ZALO_CS_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json", access_token: token },
+      body: JSON.stringify({ recipient: { user_id: userId }, message: { text } }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: number; message?: string };
+    if (!res.ok || (typeof data?.error === "number" && data.error !== 0)) {
+      console.error("[zalo] gửi thất bại tới", userId, ":", JSON.stringify(data));
+      return { ok: false, error: data?.message || "gửi lỗi" };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[zalo] lỗi mạng:", err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // Gửi 1 đoạn text tới từng người nhận. KHÔNG BAO GIỜ ném lỗi (nuốt + trả kết quả).
 export async function sendZaloText(text: string): Promise<ZaloResult> {
   const token = process.env.ZALO_OA_TOKEN_MAIN;

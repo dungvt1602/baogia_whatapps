@@ -70,7 +70,7 @@ export default function InboxScreen() {
   const view = useMemo(() => {
     const kw = q.trim().toLowerCase();
     if (!kw) return rows;
-    return rows.filter((r) => [r.customer?.name, r.fromName, r.customer?.company, r.fromPhone, r.text, r.receiveChannel?.name].some((v) => (v || "").toLowerCase().includes(kw)));
+    return rows.filter((r) => [r.customer?.name, r.fromName, r.customer?.company, r.fromPhone, r.text, r.channel].some((v) => (v || "").toLowerCase().includes(kw)));
   }, [rows, q]);
 
   const totalPages = Math.max(1, Math.ceil(view.length / PER));
@@ -105,7 +105,7 @@ export default function InboxScreen() {
               <th style={sx(gth)}>Khách hàng</th>
               <th style={sx(gth)}>Công ty</th>
               <th style={sx(gth)}>SĐT</th>
-              <th style={sx(gth)}>Kênh nhận</th>
+              <th style={sx(gth)}>Kênh</th>
               <th style={sx(gth)}>Nội dung trả lời</th>
               <th style={sx(gth + "; width:120px")}>Thời gian</th>
             </tr>
@@ -118,7 +118,7 @@ export default function InboxScreen() {
                 <td style={sx(gtd + "; font-weight:600; white-space:nowrap")}>{r.customer?.name || r.fromName || <span style={sx("color:#8B9A90; font-weight:400")}>{r.fromPhone} (lạ)</span>}</td>
                 <td style={sx(gtd + "; white-space:nowrap")}>{r.customer?.company || "—"}</td>
                 <td style={sx(gtd + "; white-space:nowrap; color:#4A5A4E")}>{r.fromPhone}</td>
-                <td style={sx(gtd + "; white-space:nowrap")}>{r.receiveChannel?.name || <span style={sx("color:#B9C5BC")}>—</span>}</td>
+                <td style={sx(gtd + "; white-space:nowrap")}>{r.channel === "ZALO" ? "Zalo" : r.channel === "WHATSAPP" ? "WhatsApp" : r.channel || <span style={sx("color:#B9C5BC")}>—</span>}</td>
                 <td style={sx(gtd + "; min-width:280px; white-space:pre-wrap; word-break:break-word")}>
                   {r.kind === "flow_response" && <span style={sx("font-size:10.5px; font-weight:700; color:#1F7440; background:#E7F5EC; border-radius:5px; padding:1px 6px; margin-right:6px")}>Flow</span>}
                   {r.text || "—"}
