@@ -47,13 +47,14 @@ function formatFlowReply(text: string | null): string {
   const container = pickFlow(data, ["container", "so_container", "number_of_container"]);
   const dest = pickFlow(data, ["Destination_port", "destination", "cang"]);
   const note = pickFlow(data, ["Note", "note", "ghi_chu"]);
-  const parts: string[] = [];
-  if (product) parts.push(product);
-  if (qty) parts.push(`SL ${qty}`);
-  if (container) parts.push(`${container} container`);
-  if (dest) parts.push(`cảng ${dest}`);
-  if (note) parts.push(`ghi chú: ${note}`);
-  return parts.length ? `Đặt hàng — ${parts.join(", ")}` : "(khách gửi form đặt lịch qua Flow)";
+  // Mỗi mục 1 dòng cho dễ đọc; mục nào trống thì bỏ.
+  const lines: string[] = [];
+  if (product) lines.push(`• Sản phẩm: ${product}`);
+  if (qty) lines.push(`• Số lượng: ${qty}`);
+  if (container) lines.push(`• Số container: ${container}`);
+  if (dest) lines.push(`• Cảng đến: ${dest}`);
+  if (note) lines.push(`• Ghi chú: ${note}`);
+  return lines.length ? `Đặt hàng qua Flow\n${lines.join("\n")}` : "(khách gửi form đặt lịch qua Flow)";
 }
 
 // Soạn nội dung báo sếp từ 1 phản hồi khách (mẫu 4 dòng).
