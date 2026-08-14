@@ -28,46 +28,26 @@ export async function register() {
 
   console.log(`[sendWorker] started, poll ${pollMs}ms`);
 
-  // Dọn nhật ký lúc ~2h sáng (giờ VN): xóa log gửi thành công quá 3 ngày.
+  // Dọn định kỳ: mỗi 10 PHÚT xóa log/phản hồi quá 3 ngày (bỏ điều kiện 2h sáng).
+  // Xóa an toàn khi lặp lại: chỉ đụng bản ghi đã quá 3 ngày, đa số lần chạy xóa 0 dòng.
   const { cleanupSuccessLogs } = await import("@/server/services/activityService");
   const { cleanupSendJobs } = await import("@/server/services/sendJobService");
   const { cleanupInbound } = await import("@/server/services/inboundService");
-  let lastCleanupDay = "";
-  const vnNow = () => {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Ho_Chi_Minh",
-      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false,
-    }).formatToParts(new Date());
-    const o: Record<string, string> = {};
-    parts.forEach((p) => (o[p.type] = p.value));
-    return { day: `${o.year}-${o.month}-${o.day}`, hour: Number(o.hour) };
-  };
-  setInterval(async () => {
-    const { day, hour } = vnNow();
-    if (hour === 2 && lastCleanupDay !== day) {
-      lastCleanupDay = day;
-      try {
-        const n = await cleanupSuccessLogs(3);
-        console.log(`[logCleanup] xóa ${n} log hoạt động (thành công) quá 3 ngày`);
-      } catch (err) {
-        console.error("[logCleanup] error:", err);
-      }
-      try {
-        // Log gửi (send_jobs): xóa HẾT quá 3 ngày dù thành công hay thất bại.
-        const n = await cleanupSendJobs(3);
-        console.log(`[logCleanup] xóa ${n} log gửi (send_jobs) quá 3 ngày`);
-      } catch (err) {
-        console.error("[logCleanup] sendJobs error:", err);
-      }
-      try {
-        // Phản hồi khách (inbound_messages): xóa HẾT quá 3 ngày.
-        const n = await cleanupInbound(3);
-        console.log(`[logCleanup] xóa ${n} phản hồi (inbound_messages) quá 3 ngày`);
-      } catch (err) {
-        console.error("[logCleanup] inbound error:", err);
-      }
+  let cleaning = false;
+  const runCleanup = async () => {
+    if (cleaning) return; // tránh chồng lần chạy trước chưa xong
+    cleaning = true;
+    try {
+      const a = await cleanupSuccessLogs(3); // activity_logs SUCCESS > 3 ngày
+      const b = await cleanupSendJobs(3); // send_jobs tất cả > 3 ngày
+      const c = await cleanupInbound(3); // inbound_messages tất cả > 3 ngày
+      if (a || b || c) console.log(`[logCleanup] xóa >3 ngày -> activity:${a} send_jobs:${b} inbound:${c}`);
+    } catch (err) {
+      console.error("[logCleanup] error:", err);
+    } finally {
+      cleaning = false;
     }
-  }, 15 * 60 * 1000); // kiểm tra mỗi 15 phút
-
-  console.log("[logCleanup] scheduled ~02:00 (Asia/Ho_Chi_Minh)");
+  };
+  setInterval(runCleanup, 10 * 60 * 1000); // mỗi 10 phút
+  console.log("[logCleanup] chạy mỗi 10 phút (xóa >3 ngày)");
 }
