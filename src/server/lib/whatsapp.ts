@@ -36,6 +36,18 @@ function apiVersion(): string {
   return process.env.WHATSAPP_API_VERSION || "v20.0";
 }
 
+// fetch CÓ TIMEOUT: quá `ms` không phản hồi thì HỦY (throw) — chống 1 cuộc gọi mạng
+// treo làm đơ cả worker gửi. Dùng globalThis.fetch để không tự đệ quy khi thay thế.
+async function fetchWithTimeout(url: string, options: RequestInit = {}, ms = 20000): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await globalThis.fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Upload ảnh lên WhatsApp -> trả media id (giống bot.uploadImageMedia).
 export async function uploadWhatsAppMedia(opts: {
   token: string;
@@ -50,7 +62,7 @@ export async function uploadWhatsAppMedia(opts: {
   form.append("type", mime);
   form.append("file", new Blob([opts.bytes], { type: mime }), opts.filename || "quotation");
 
-  const res = await fetch(`https://graph.facebook.com/${apiVersion()}/${opts.phoneNumberId}/media`, {
+  const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion()}/${opts.phoneNumberId}/media`, {
     method: "POST",
     headers: { authorization: `Bearer ${opts.token}` },
     body: form,
@@ -106,7 +118,7 @@ async function sendWhatsAppTemplate(opts: {
       ...(components.length ? { components } : {}),
     },
   };
-  const res = await fetch(`https://graph.facebook.com/${apiVersion()}/${opts.phoneNumberId}/messages`, {
+  const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion()}/${opts.phoneNumberId}/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${opts.token}`, "content-type": "application/json" },
     body: JSON.stringify(payload),
@@ -150,7 +162,7 @@ export async function sendQuotationMessage(input: SendInput): Promise<{ messageI
       });
     }
     // Gửi text (chỉ hoạt động trong cửa sổ 24h)
-    const res = await fetch(`https://graph.facebook.com/${apiVersion()}/${phoneNumberId}/messages`, {
+    const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion()}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", to: input.toPhone, type: "text", text: { body: input.text } }),
@@ -163,7 +175,7 @@ export async function sendQuotationMessage(input: SendInput): Promise<{ messageI
   if (type === "TELEGRAM") {
     const chatId = input.toPhone || input.accountId || "";
     if (!token || !chatId) throw new Error("Thiếu Telegram bot token hoặc chat id.");
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetchWithTimeout(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text: input.text }),
