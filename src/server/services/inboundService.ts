@@ -84,7 +84,12 @@ export async function updateDeliveryStatus(waMessageId: string, status: string, 
   const s = status.toUpperCase(); // SENT | DELIVERED | READ | FAILED
   await prisma.sendJob.updateMany({
     where: { messageId: waMessageId },
-    data: { status: s === "SENT" ? "SENT" : s, ...(s === "FAILED" && errorText ? { error: errorText } : {}) },
+    data: {
+      status: s === "SENT" ? "SENT" : s,
+      // FAILED do GIAO KHÔNG TỚI (Meta đã nhận rồi mới fail) -> KHÔNG gửi lại (retryCount=99),
+      // tránh vòng lặp: gửi -> webhook fail -> gửi lại -> ... Kèm lý do Meta.
+      ...(s === "FAILED" ? { retryCount: 99, ...(errorText ? { error: errorText } : {}) } : {}),
+    },
   });
 }
 
