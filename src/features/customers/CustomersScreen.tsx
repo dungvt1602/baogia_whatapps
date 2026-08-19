@@ -371,8 +371,20 @@ export default function CustomersScreen() {
       </div>
       <div style={sx("display:flex; align-items:center; gap:8px; margin-top:10px")}>
         <div style={sx("font-size:12.5px; color:#7B8A80; flex:1")}>Trang {curPage}/{totalPages} · {view.length} khách hàng</div>
+        <div style={sx("display:flex; align-items:center; gap:5px; font-size:12.5px; color:#7B8A80")}>
+          <span>Đến trang</span>
+          <input
+            type="number" min={1} max={totalPages} key={curPage} defaultValue={curPage}
+            onKeyDown={(e) => { if (e.key === "Enter") { const n = Number((e.target as HTMLInputElement).value); if (n) setPage(Math.min(Math.max(1, Math.floor(n)), totalPages)); } }}
+            style={sx("height:32px; width:58px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:8px; padding:0 6px; font-size:13px; text-align:center; color:#14261A; outline:none")}
+            title="Gõ số trang rồi Enter"
+          />
+          <span>/ {totalPages}</span>
+        </div>
+        <HButton s={`${ghost} ${curPage <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(1)} title="Trang đầu">« Đầu</HButton>
         <HButton s={`${ghost} ${curPage <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage - 1)}>‹ Trước</HButton>
         <HButton s={`${ghost} ${curPage >= totalPages ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage + 1)}>Sau ›</HButton>
+        <HButton s={`${ghost} ${curPage >= totalPages ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(totalPages)} title="Trang cuối">Cuối »</HButton>
       </div>
       <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Gán khách vào template ở menu Template (kéo-thả). Bấm tên khách để xem chi tiết, bấm tiêu đề cột để sắp xếp.</div>
 
