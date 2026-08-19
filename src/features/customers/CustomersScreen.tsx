@@ -7,6 +7,63 @@ import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect"
 import { applyDial, findCountry, splitPhone } from "@/components/common/countries";
 import { createCustomerSchema } from "@/server/validation/customer.schema";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
+
+// Map cột file (linh hoạt: bỏ dấu/khoảng trắng/hoa-thường) -> field khách hàng.
+const normHeader = (s: unknown) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+const HEADER_ALIASES: Record<string, string[]> = {
+  name: ["tenkhach", "ten", "name", "hoten", "khachhang", "tenkh"],
+  company: ["congty", "company", "cty", "doanhnghiep"],
+  whatsappPhone: ["sowhatsapp", "whatsapp", "whatsappphone", "wa", "sdtwhatsapp", "sowa"],
+  phone: ["sdtkhac", "sdt", "phone", "dienthoai", "sodienthoai"],
+  email: ["email", "mail"],
+  market: ["quocgia", "thitruong", "market", "qg", "nuoc"],
+  receiveQuotation: ["nhanbaogia", "nhan", "receivequotation", "baogia"],
+  note: ["ghichu", "note", "ghichep"],
+};
+type ImportRow = { name: string; company: string; whatsappPhone: string; phone: string; email: string; market: string; receiveQuotation: boolean; note: string };
+function mapImportRow(raw: Record<string, unknown>): ImportRow {
+  const out: Record<string, string> = {};
+  for (const [key, val] of Object.entries(raw)) {
+    const h = normHeader(key);
+    for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
+      if (aliases.includes(h)) { out[field] = String(val ?? "").trim(); break; }
+    }
+  }
+  const digits = (s?: string) => (s || "").replace(/\D/g, "");
+  const truthy = (s?: string) => {
+    const v = normHeader(s);
+    if (["khong", "no", "false", "0"].includes(v)) return false;
+    return true; // mặc định nhận báo giá
+  };
+  return {
+    name: out.name || "",
+    company: out.company || "",
+    whatsappPhone: digits(out.whatsappPhone),
+    phone: digits(out.phone),
+    email: out.email || "",
+    market: out.market || "",
+    receiveQuotation: truthy(out.receiveQuotation),
+    note: out.note || "",
+  };
+}
+// Parse 1 sheet -> mảng ImportRow (bỏ dòng không có tên lẫn WhatsApp).
+function parseSheetRows(wb: XLSX.WorkBook, sheet: string): ImportRow[] {
+  const ws = wb.Sheets[sheet];
+  if (!ws) return [];
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+  return raw.map(mapImportRow).filter((r) => r.name || r.whatsappPhone);
+}
+// Tự dò sheet nào có cột tên + WhatsApp (chọn mặc định khi file nhiều tab).
+function detectCustomerSheet(wb: XLSX.WorkBook): string {
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[name], { defval: "" });
+    if (!rows.length) continue;
+    const headers = Object.keys(rows[0]).map(normHeader);
+    if (headers.some((h) => HEADER_ALIASES.name.includes(h)) && headers.some((h) => HEADER_ALIASES.whatsappPhone.includes(h))) return name;
+  }
+  return wb.SheetNames[0];
+}
 
 type Customer = {
   id: string;
@@ -18,9 +75,10 @@ type Customer = {
   market: string | null;
   status: string;
   receiveQuotation: boolean;
+  note: string | null;
   templates: { id: string; name: string }[];
 };
-type Form = { id?: string; name: string; company: string; whatsappPhone: string; phone: string; email: string; market: string; status: string; receiveQuotation: boolean };
+type Form = { id?: string; name: string; company: string; whatsappPhone: string; phone: string; email: string; market: string; status: string; receiveQuotation: boolean; note: string };
 type SortKey = "name" | "company" | "whatsappPhone" | "phone" | "email" | "market" | "status";
 
 const inp = "height:40px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
@@ -33,7 +91,7 @@ const lbl = "font-size:12px; font-weight:600; color:#3C4A40; margin-bottom:4px";
 const gth = "padding:6px 8px; font-size:11px; font-weight:700; color:#33475B; background:#EEF2F5; border:1px solid #D3DCE3; white-space:nowrap; user-select:none; text-align:left; position:sticky; top:0";
 const gtd = "padding:5px 8px; font-size:12px; color:#1B2A20; border:1px solid #E4EAEF; white-space:nowrap; background:inherit";
 
-const empty = (): Form => ({ name: "", company: "", whatsappPhone: "", phone: "", email: "", market: "", status: "ACTIVE", receiveQuotation: true });
+const empty = (): Form => ({ name: "", company: "", whatsappPhone: "", phone: "", email: "", market: "", status: "ACTIVE", receiveQuotation: true, note: "" });
 
 // Hiển thị số WhatsApp: tách mã vùng dạng "(+84) 901234002".
 const fmtWa = (phone: string | null, market: string | null) => {
@@ -73,6 +131,8 @@ export default function CustomersScreen() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<{ text: string; run: () => Promise<void> } | null>(null); // xác nhận xóa
+  const [importFile, setImportFile] = useState<{ wb: XLSX.WorkBook; sheetNames: string[]; sheet: string; fileName: string } | null>(null); // xem trước nhập
+  const [importing, setImporting] = useState(false);
   const [detail, setDetail] = useState<Customer | null>(null); // xem chi tiết
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
@@ -132,7 +192,7 @@ export default function CustomersScreen() {
 
   function openEdit(c: Customer) {
     setErrors({}); setErr("");
-    setForm({ id: c.id, name: c.name, company: c.company || "", whatsappPhone: c.whatsappPhone || "", phone: c.phone || "", email: c.email || "", market: c.market || "", status: c.status || "ACTIVE", receiveQuotation: c.receiveQuotation });
+    setForm({ id: c.id, name: c.name, company: c.company || "", whatsappPhone: c.whatsappPhone || "", phone: c.phone || "", email: c.email || "", market: c.market || "", status: c.status || "ACTIVE", receiveQuotation: c.receiveQuotation, note: c.note || "" });
   }
   function openAdd() { setErrors({}); setErr(""); setForm(empty()); }
   async function save() {
@@ -167,10 +227,59 @@ export default function CustomersScreen() {
     try { await pending.run(); setPending(null); }
     catch (e) { toast.error((e as Error).message); setPending(null); }
   }
+  // Tải file mẫu .xlsx (đúng cột) để khách điền rồi nhập lại.
+  function downloadTemplate() {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Tên khách", "Công ty", "Số WhatsApp", "SĐT khác", "Email", "Quốc gia", "Nhận báo giá"],
+      ["Nguyễn Văn A", "Công ty ABC", "84901234567", "", "a@abc.com", "VN", "Có"],
+      ["Mai Khôi", "Cty XYZ", "84332777154", "", "", "IN", "Có"],
+    ]);
+    ws["!cols"] = [{ wch: 20 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "KhachHang");
+    XLSX.writeFile(wb, "mau-khach-hang.xlsx");
+  }
+
+  // Đọc file .xlsx/.csv -> lưu workbook, tự chọn sheet có cột khách -> mở xem trước.
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset để chọn lại cùng file được
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      if (!wb.SheetNames.length) return toast.error("File không có sheet nào.");
+      setImportFile({ wb, sheetNames: wb.SheetNames, sheet: detectCustomerSheet(wb), fileName: file.name });
+    } catch {
+      toast.error("Không đọc được file. Cần .xlsx, .xls hoặc .csv.");
+    }
+  }
+
+  async function doImport() {
+    if (!importFile) return;
+    const rows = parseSheetRows(importFile.wb, importFile.sheet);
+    if (rows.length === 0) return toast.error("Sheet này không có dòng khách nào.");
+    setImporting(true);
+    try {
+      const res = await postJSON<{ created: number; skippedDup: number; invalid: { row: number; reason: string }[] }>("/api/customers/import", { rows });
+      setImportFile(null);
+      await load();
+      const parts = [`Đã thêm ${res.created} khách`];
+      if (res.skippedDup) parts.push(`bỏ ${res.skippedDup} trùng`);
+      if (res.invalid.length) parts.push(`${res.invalid.length} dòng lỗi`);
+      toast.success(parts.join(" · "));
+      if (res.invalid.length) console.warn("[import] dòng lỗi:", res.invalid);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   function exportCsv() {
     const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const head = ["TEN_KHACH", "CONG_TY", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "TEMPLATE"];
-    const data = view.map((c) => [c.name, c.company || "", c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.templates.map((t) => t.name).join("; ") || "Kho"]);
+    const head = ["TEN_KHACH", "CONG_TY", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "GHI_CHU", "TEMPLATE"];
+    const data = view.map((c) => [c.name, c.company || "", c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.note || "", c.templates.map((t) => t.name).join("; ") || "Kho"]);
     const csv = [head, ...data].map((r) => r.map(cell).join(",")).join("\r\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
@@ -198,6 +307,11 @@ export default function CustomersScreen() {
         <div style={sx("font-size:12.5px; color:#7B8A80")}>{view.length} khách hàng{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
         <HButton s={`${ghost} ${selected.size ? "" : "opacity:.5; pointer-events:none"}; border-color:#E4C7C5; color:#B3261E`} onClick={delSelected}>🗑 Xóa đã chọn</HButton>
+        <HButton s={ghost} onClick={downloadTemplate}>⭳ Mẫu</HButton>
+        <label style={sx(ghost + "; display:inline-flex; align-items:center; gap:4px")} title="Nhập từ file Excel/CSV">
+          ⭱ Nhập Excel
+          <input type="file" accept=".xlsx,.xls,.csv" onChange={onImportFile} style={sx("display:none")} />
+        </label>
         <HButton s={ghost} onClick={exportCsv}>⭳ Excel</HButton>
         <HButton s={green} onClick={openAdd}>+ Thêm khách hàng</HButton>
       </div>
@@ -306,6 +420,8 @@ export default function CustomersScreen() {
 
             <Field label="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="buyer@company.com" error={errors.email} />
 
+            <Field label="Ghi chú" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Tuỳ chọn" />
+
             <label style={sx("display:flex; align-items:center; gap:8px; margin:2px 0 18px; cursor:pointer; font-size:13.5px; color:#3C4A40")}>
               <input type="checkbox" checked={form.receiveQuotation} onChange={(e) => setForm({ ...form, receiveQuotation: e.target.checked })} style={sx("cursor:pointer; width:16px; height:16px")} />
               Nhận báo giá (chỉ khách ACTIVE + bật mục này mới được gửi)
@@ -334,12 +450,70 @@ export default function CustomersScreen() {
         </div>
       )}
 
+      {/* Modal xem trước NHẬP Excel */}
+      {importFile && (() => {
+        const rows = parseSheetRows(importFile.wb, importFile.sheet);
+        const ok = rows.filter((r) => r.name && r.whatsappPhone.length >= 6 && r.whatsappPhone.length <= 15);
+        const bad = rows.length - ok.length;
+        return (
+          <div style={sx("position:fixed; inset:0; z-index:75; display:flex; align-items:center; justify-content:center; padding:20px")}>
+            <div onClick={() => !importing && setImportFile(null)} style={sx("position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)")} />
+            <div style={sx("position:relative; width:100%; max-width:600px; max-height:88vh; overflow:auto; background:#fff; border-radius:20px; padding:24px; box-shadow:0 30px 70px -20px rgba(8,40,24,.5)")}>
+              <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:12px")}>
+                <div style={sx("font-size:17px; font-weight:700; color:#14261A; flex:1")}>Nhập khách hàng từ file</div>
+                <HButton s="width:32px; height:32px; border:none; background:#F1F4F1; border-radius:9px; cursor:pointer; color:#4A5A4E" onClick={() => !importing && setImportFile(null)}>✕</HButton>
+              </div>
+              <div style={sx("font-size:13px; color:#4A5A4E; margin-bottom:8px")}>📄 {importFile.fileName}</div>
+              {importFile.sheetNames.length > 1 && (
+                <label style={sx("display:flex; flex-direction:column; margin-bottom:10px")}>
+                  <span style={sx("font-size:12px; font-weight:600; color:#3C4A40; margin-bottom:4px")}>Chọn sheet (tab) chứa khách hàng</span>
+                  <select value={importFile.sheet} onChange={(e) => setImportFile({ ...importFile, sheet: e.target.value })} style={sx(`${inp} height:36px`)}>
+                    {importFile.sheetNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+              )}
+              <div style={sx("font-size:13px; margin-bottom:12px")}>
+                Đọc được <b>{rows.length}</b> dòng · <span style={sx("color:#1F7440; font-weight:600")}>✓ {ok.length} hợp lệ</span>
+                {bad > 0 && <span style={sx("color:#B3261E; margin-left:10px")}>⚠ {bad} thiếu tên/WhatsApp (sẽ bỏ qua)</span>}
+              </div>
+              <div style={sx("border:1px solid #D3DCE3; border-radius:9px; overflow:auto; max-height:40vh")}>
+                <table style={sx("width:100%; border-collapse:collapse; min-width:520px")}>
+                  <thead><tr>
+                    <th style={sx(gth)}>Tên</th><th style={sx(gth)}>Công ty</th><th style={sx(gth)}>WhatsApp</th><th style={sx(gth)}>Quốc gia</th>
+                  </tr></thead>
+                  <tbody>
+                    {rows.length === 0 && <tr><td colSpan={4} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:18px")}>Sheet này không có cột tên/WhatsApp. Chọn sheet khác.</td></tr>}
+                    {rows.slice(0, 8).map((r, i) => {
+                      const valid = r.name && r.whatsappPhone.length >= 6 && r.whatsappPhone.length <= 15;
+                      return (
+                        <tr key={i} style={sx(`background:${valid ? (i % 2 ? "#FBFDFB" : "#fff") : "#FDECEC"}`)}>
+                          <td style={sx(gtd)}>{r.name || <span style={sx("color:#B3261E")}>(thiếu)</span>}</td>
+                          <td style={sx(gtd)}>{r.company || "—"}</td>
+                          <td style={sx(gtd)}>{r.whatsappPhone || <span style={sx("color:#B3261E")}>(thiếu)</span>}</td>
+                          <td style={sx(gtd)}>{r.market || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {rows.length > 8 && <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:6px")}>… và {rows.length - 8} dòng nữa</div>}
+              <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Khách trùng số WhatsApp (đã có trong hệ thống hoặc lặp trong file) sẽ tự động bỏ qua.</div>
+              <div style={sx("display:flex; gap:10px; margin-top:16px")}>
+                <HButton s={`${green} flex:1; height:44px ${ok.length === 0 || importing ? "; opacity:.5; pointer-events:none" : ""}`} onClick={doImport}>{importing ? "Đang nhập..." : `Nhập ${ok.length} khách`}</HButton>
+                <HButton s={`${ghost} height:44px ${importing ? "; opacity:.5; pointer-events:none" : ""}`} onClick={() => setImportFile(null)}>Hủy</HButton>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Modal xem chi tiết */}
       {detail && (() => {
         const rows: [string, React.ReactNode][] = [
           ["Tên khách", detail.name], ["Công ty", detail.company || "—"], ["Số WhatsApp", detail.whatsappPhone || "—"], ["SĐT khác", detail.phone || "—"],
           ["Email", detail.email || "—"], ["Thị trường", detail.market || "—"], ["Trạng thái", detail.status],
-          ["Nhận báo giá", detail.receiveQuotation ? "Có" : "Không"], ["Template", detail.templates.map((t) => t.name).join(", ") || "Kho"],
+          ["Nhận báo giá", detail.receiveQuotation ? "Có" : "Không"], ["Ghi chú", detail.note || "—"], ["Template", detail.templates.map((t) => t.name).join(", ") || "Kho"],
         ];
         return (
           <div style={sx("position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px")}>

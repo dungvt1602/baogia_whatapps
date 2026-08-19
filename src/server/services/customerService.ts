@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
-import type { CreateCustomerInput, PatchCustomerInput } from "@/server/validation/customer.schema";
+import { createCustomerSchema, type CreateCustomerInput, type PatchCustomerInput } from "@/server/validation/customer.schema";
 
 export type ListCustomersOptions = {
   excludeTemplate?: string | null; // trả ứng viên CHƯA thuộc template này
@@ -99,10 +99,67 @@ export function createCustomer(input: CreateCustomerInput) {
       market: input.market ?? null,
       status: input.status ?? "ACTIVE",
       receiveQuotation: input.receiveQuotation ?? true,
+      note: input.note ?? null,
       // Nếu có templateId -> tạo luôn link N-N.
       ...(templateId ? { templateLinks: { create: { templateId: BigInt(templateId) } } } : {}),
     },
   });
+}
+
+// Nhập hàng loạt khách hàng từ file (Excel/CSV đã parse ở client thành mảng object).
+// - Validate từng dòng bằng createCustomerSchema (tên + WhatsApp bắt buộc).
+// - Bỏ dòng trùng WhatsApp trong file, và trùng với khách đã có trong DB.
+// - Tạo 1 phát bằng createMany. Trả về số tạo / số bỏ trùng / danh sách lỗi.
+export async function importCustomers(rows: unknown[]): Promise<{
+  created: number;
+  skippedDup: number;
+  invalid: { row: number; reason: string }[];
+}> {
+  const invalid: { row: number; reason: string }[] = [];
+  const valid: CreateCustomerInput[] = [];
+  const seen = new Set<string>();
+
+  rows.forEach((raw, i) => {
+    const parsed = createCustomerSchema.safeParse(raw);
+    if (!parsed.success) {
+      invalid.push({ row: i + 2, reason: parsed.error.issues[0]?.message || "Dữ liệu không hợp lệ" }); // +2: bỏ dòng tiêu đề
+      return;
+    }
+    const wa = parsed.data.whatsappPhone;
+    if (seen.has(wa)) {
+      invalid.push({ row: i + 2, reason: `Trùng WhatsApp ${wa} trong file` });
+      return;
+    }
+    seen.add(wa);
+    valid.push(parsed.data);
+  });
+
+  // Bỏ khách đã tồn tại trong DB (theo whatsappPhone).
+  const existing = seen.size
+    ? await prisma.customer.findMany({ where: { whatsappPhone: { in: [...seen] } }, select: { whatsappPhone: true } })
+    : [];
+  const existSet = new Set(existing.map((e) => e.whatsappPhone));
+  const toCreate = valid.filter((v) => !existSet.has(v.whatsappPhone));
+  const skippedDup = valid.length - toCreate.length;
+
+  let created = 0;
+  if (toCreate.length) {
+    const r = await prisma.customer.createMany({
+      data: toCreate.map((v) => ({
+        name: v.name,
+        company: v.company ?? null,
+        phone: v.phone ?? null,
+        whatsappPhone: v.whatsappPhone ?? v.phone ?? null,
+        email: v.email ?? null,
+        market: v.market ?? null,
+        status: v.status ?? "ACTIVE",
+        receiveQuotation: v.receiveQuotation ?? true,
+        note: v.note ?? null,
+      })),
+    });
+    created = r.count;
+  }
+  return { created, skippedDup, invalid };
 }
 
 // PATCH: chỉ sửa thông tin khách (gán/gỡ template chuyển sang API link riêng).
@@ -116,6 +173,7 @@ export function updateCustomer(id: string, input: PatchCustomerInput) {
   if (input.market !== undefined) data.market = input.market;
   if (input.status !== undefined) data.status = input.status;
   if (input.receiveQuotation !== undefined) data.receiveQuotation = input.receiveQuotation;
+  if (input.note !== undefined) data.note = input.note;
   return prisma.customer.update({ where: { id: BigInt(id) }, data });
 }
 

@@ -267,6 +267,7 @@ model Customer {
   market           String?  @db.VarChar(50)
   status           String   @default("ACTIVE") @db.VarChar(20) // ACTIVE | INACTIVE
   receiveQuotation Boolean  @default(true) @map("receive_quotation") // có nhận báo giá không
+  note             String?  @db.Text // ghi chú (import từ GHI_CHU của sheet bot)
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
   // N-N: customer <-> template (qua bảng nối template_customers)

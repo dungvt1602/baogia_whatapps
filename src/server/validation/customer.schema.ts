@@ -29,6 +29,7 @@ export const createCustomerSchema = z.object({
   market: z.string().max(80).nullish(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
   receiveQuotation: z.boolean().optional(),
+  note: z.string().max(2000).nullish(),
   templateId: numOrStr.nullish(),
 });
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
@@ -43,5 +44,6 @@ export const patchCustomerSchema = z.object({
   market: z.string().max(80).nullish(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
   receiveQuotation: z.boolean().optional(),
+  note: z.string().max(2000).nullish(),
 });
 export type PatchCustomerInput = z.infer<typeof patchCustomerSchema>;
