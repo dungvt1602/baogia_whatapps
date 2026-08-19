@@ -45,7 +45,15 @@ export async function POST(req: NextRequest) {
         for (const st of statuses) {
           const id = String(st?.id || "");
           const status = String(st?.status || "");
-          if (id && status) await updateDeliveryStatus(id, status);
+          // Khi failed: lấy lý do Meta báo (code + chi tiết) để lưu vào send_jobs.error.
+          let errText: string | null = null;
+          const errs = Array.isArray(st?.errors) ? (st.errors as Record<string, unknown>[]) : [];
+          if (status === "failed" && errs.length) {
+            const e = errs[0] as { code?: unknown; title?: unknown; message?: unknown; error_data?: { details?: unknown } };
+            const detail = e.error_data?.details || e.message || "";
+            errText = `[${e.code ?? "?"}] ${e.title ?? ""}${detail ? " — " + detail : ""}`.trim();
+          }
+          if (id && status) await updateDeliveryStatus(id, status, errText);
         }
 
         // Tin khách gửi đến (trả lời / bấm nút Flow).

@@ -79,11 +79,12 @@ export async function recordInbound(input: {
 }
 
 // Cập nhật trạng thái gửi khi Meta báo delivered/read/failed (khớp theo messageId).
-export async function updateDeliveryStatus(waMessageId: string, status: string): Promise<void> {
+// Khi FAILED kèm lý do -> lưu vào error để soi được tại sao giao không tới.
+export async function updateDeliveryStatus(waMessageId: string, status: string, errorText?: string | null): Promise<void> {
   const s = status.toUpperCase(); // SENT | DELIVERED | READ | FAILED
   await prisma.sendJob.updateMany({
     where: { messageId: waMessageId },
-    data: { status: s === "SENT" ? "SENT" : s },
+    data: { status: s === "SENT" ? "SENT" : s, ...(s === "FAILED" && errorText ? { error: errorText } : {}) },
   });
 }
 
