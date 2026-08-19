@@ -315,12 +315,16 @@ export async function processNextBatch() {
       });
     } catch (err) {
       failed++;
+      const msg = err instanceof Error ? err.message : String(err);
       const rc = job.retryCount + 1;
+      // Lỗi VĨNH VIỄN của Meta (retry cũng vô ích) -> FAILED luôn, khỏi quay vòng hàng đợi:
+      // 131049 chặn tin marketing, 131026 không giao được, 132xxx lỗi template, (#100) sai tham số...
+      const permanent = /131049|131026|131047|131000|132\d{3}|\(#100\)|Parameter name is missing/.test(msg);
       await prisma.sendJob.update({
         where: { id: job.id },
         data: {
-          status: rc >= MAX_RETRY ? "FAILED" : "QUEUED",
-          error: err instanceof Error ? err.message : String(err),
+          status: permanent || rc >= MAX_RETRY ? "FAILED" : "QUEUED",
+          error: msg,
           retryCount: rc,
         },
       });
