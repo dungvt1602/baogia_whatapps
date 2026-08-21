@@ -2,6 +2,13 @@ import "server-only";
 import { prisma } from "@/server/db/prisma";
 import { createQuotation } from "@/server/services/quotationService";
 import type { CreateTemplateInput, UpdateTemplateInput } from "@/server/validation/template.schema";
+import {
+  isStorageConfigured,
+  templateImagePath,
+  uploadImageToStorage,
+  downloadImageFromStorage,
+  deleteImageFromStorage,
+} from "@/server/lib/storage";
 
 export function listTemplates() {
   return prisma.template.findMany({
@@ -74,10 +81,27 @@ export function getTemplateDetail(id: string) {
   });
 }
 
-// ---- Ảnh header của template (bytes lưu trong DB) ----
-export function getTemplateImage(id: bigint | number | string) {
-  return prisma.templateImage.findUnique({ where: { templateId: BigInt(id) } });
+// ---- Ảnh header của template (file trên Supabase Storage; DB chỉ giữ metadata) ----
+
+// Metadata ảnh (KHÔNG kéo bytes). storagePath có = ảnh nằm trên Storage.
+export function getTemplateImageMeta(id: bigint | number | string) {
+  return prisma.templateImage.findUnique({
+    where: { templateId: BigInt(id) },
+    select: { mime: true, storagePath: true, updatedAt: true },
+  });
 }
+
+// Lấy BYTES ảnh (để upload WhatsApp): ưu tiên Storage, fallback bytes DB (ảnh cũ legacy).
+export async function getTemplateImage(id: bigint | number | string): Promise<{ data: Uint8Array; mime: string } | null> {
+  const row = await prisma.templateImage.findUnique({ where: { templateId: BigInt(id) } });
+  if (!row) return null;
+  if (row.storagePath) {
+    const ab = await downloadImageFromStorage(row.storagePath);
+    if (ab) return { data: new Uint8Array(ab), mime: row.mime };
+  }
+  return row.data ? { data: new Uint8Array(row.data), mime: row.mime } : null;
+}
+
 // Chỉ kiểm tra CÓ ảnh hay không (không kéo bytes) — ảnh ~2MB, kéo mỗi vòng worker
 // từng làm cháy 11.6GB egress Supabase/ngày. Bytes chỉ tải đúng lúc cần upload.
 export async function hasTemplateImage(id: bigint | number | string): Promise<boolean> {
@@ -87,17 +111,36 @@ export async function hasTemplateImage(id: bigint | number | string): Promise<bo
   });
   return !!row;
 }
+
+// Lưu ảnh: Storage đã cấu hình -> upload path CỐ ĐỊNH (upsert = GHI ĐÈ ảnh cũ, không rác),
+// DB chỉ giữ metadata (data=null). Chưa có SUPABASE_SERVICE_ROLE_KEY -> fallback bytes DB.
 export async function setTemplateImage(id: string, data: ArrayBuffer, mime: string) {
   const templateId = BigInt(id);
-  const bytes = new Uint8Array(data);
-  await prisma.templateImage.upsert({
-    where: { templateId },
-    create: { templateId, data: bytes, mime },
-    update: { data: bytes, mime },
-  });
+  if (isStorageConfigured()) {
+    const path = templateImagePath(id);
+    await uploadImageToStorage(path, data, mime);
+    await prisma.templateImage.upsert({
+      where: { templateId },
+      create: { templateId, data: null, storagePath: path, mime },
+      update: { data: null, storagePath: path, mime },
+    });
+  } else {
+    const bytes = new Uint8Array(data);
+    await prisma.templateImage.upsert({
+      where: { templateId },
+      create: { templateId, data: bytes, mime },
+      update: { data: bytes, mime },
+    });
+  }
   return { ok: true };
 }
+
 export async function clearTemplateImage(id: string) {
+  const row = await prisma.templateImage.findUnique({
+    where: { templateId: BigInt(id) },
+    select: { storagePath: true },
+  });
+  if (row?.storagePath) await deleteImageFromStorage(row.storagePath);
   await prisma.templateImage.deleteMany({ where: { templateId: BigInt(id) } });
   return { ok: true };
 }

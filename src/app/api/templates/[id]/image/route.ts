@@ -1,13 +1,20 @@
 import { handle } from "@/server/http/json";
-import { getTemplateImage, setTemplateImage, clearTemplateImage } from "@/server/services/templateService";
+import { getTemplateImage, getTemplateImageMeta, setTemplateImage, clearTemplateImage } from "@/server/services/templateService";
+import { publicImageUrl } from "@/server/lib/storage";
 
-// GET — trả bytes ảnh header của template (hoặc 404 nếu chưa có).
+// GET — ảnh header của template.
+// Ảnh trên Storage -> redirect sang URL public (CDN Supabase, có cache, egress rẻ).
+// Ảnh legacy trong DB -> serve bytes như cũ.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const meta = await getTemplateImageMeta(id);
+  if (!meta) return new Response("Chưa có ảnh", { status: 404 });
+  if (meta.storagePath) {
+    return Response.redirect(publicImageUrl(meta.storagePath) + `?t=${meta.updatedAt.getTime()}`, 302);
+  }
   const img = await getTemplateImage(id);
   if (!img) return new Response("Chưa có ảnh", { status: 404 });
-  // Cache mạnh được vì UI gắn ?t=<updatedAt> làm cache-buster — đổi ảnh là URL đổi.
-  // (no-store cũ khiến mỗi lần xem chi tiết kéo lại ~2MB từ Supabase -> tốn egress.)
+  // Cache được vì UI gắn ?t=<updatedAt> làm cache-buster — đổi ảnh là URL đổi.
   return new Response(new Uint8Array(img.data), {
     headers: { "content-type": img.mime, "cache-control": "private, max-age=86400" },
   });
