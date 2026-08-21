@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/server/db/prisma";
 import { renderTemplate, renderBodyParams } from "@/server/lib/placeholders";
 import { sendQuotationMessage, uploadWhatsAppMedia } from "@/server/lib/whatsapp";
-import { getTemplateImage } from "@/server/services/templateService";
+import { getTemplateImage, hasTemplateImage } from "@/server/services/templateService";
 import { logActivity } from "@/server/services/activityService";
 
 const MAX_RETRY = 3;
@@ -239,19 +239,20 @@ export async function processNextBatch() {
   const dryRun = process.env.SEND_DRY_RUN !== "false";
 
   // Ảnh header = ảnh do người dùng upload vào template (giống bot). Có ảnh thì gửi kèm.
-  const tplImage = await getTemplateImage(tpl.id);
+  // CHỈ check metadata (không kéo 2MB bytes mỗi vòng — từng cháy 11.6GB egress/ngày).
+  const includeImage = await hasTemplateImage(tpl.id);
   // sendAsText bật -> ép đi đường text thường (như commit cũ), bỏ qua template Meta.
   const useWaTemplate =
     (channel?.type || "").toUpperCase() === "WHATSAPP" && !!tpl.waTemplateName && !tpl.sendAsText;
-  const includeImage = !!tplImage;
   let mediaId = batch.mediaId || "";
 
-  // Upload ảnh upload của template lên WhatsApp 1 lần/lệnh (chỉ khi gửi thật + có ảnh).
-  if (useWaTemplate && includeImage && !mediaId && !dryRun && tplImage) {
+  // Upload ảnh lên WhatsApp 1 lần/lệnh — bytes chỉ tải ĐÚNG LÚC NÀY (khi chưa có mediaId).
+  if (useWaTemplate && includeImage && !mediaId && !dryRun) {
     try {
       const token = process.env[channel?.apiKeyEnv || "WHATSAPP_TOKEN_MAIN"];
       const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || channel?.accountId || "";
-      if (token && phoneNumberId) {
+      const tplImage = token && phoneNumberId ? await getTemplateImage(tpl.id) : null;
+      if (token && phoneNumberId && tplImage) {
         const bytes = new Uint8Array(tplImage.data).buffer;
         mediaId = await uploadWhatsAppMedia({ token, phoneNumberId, bytes, mime: tplImage.mime, filename: `${batch.code}` });
         await prisma.sendBatch.update({ where: { id: batch.id }, data: { mediaId } });

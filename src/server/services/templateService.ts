@@ -78,6 +78,15 @@ export function getTemplateDetail(id: string) {
 export function getTemplateImage(id: bigint | number | string) {
   return prisma.templateImage.findUnique({ where: { templateId: BigInt(id) } });
 }
+// Chỉ kiểm tra CÓ ảnh hay không (không kéo bytes) — ảnh ~2MB, kéo mỗi vòng worker
+// từng làm cháy 11.6GB egress Supabase/ngày. Bytes chỉ tải đúng lúc cần upload.
+export async function hasTemplateImage(id: bigint | number | string): Promise<boolean> {
+  const row = await prisma.templateImage.findUnique({
+    where: { templateId: BigInt(id) },
+    select: { mime: true },
+  });
+  return !!row;
+}
 export async function setTemplateImage(id: string, data: ArrayBuffer, mime: string) {
   const templateId = BigInt(id);
   const bytes = new Uint8Array(data);

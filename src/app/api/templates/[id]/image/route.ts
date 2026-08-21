@@ -6,8 +6,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const img = await getTemplateImage(id);
   if (!img) return new Response("Chưa có ảnh", { status: 404 });
+  // Cache mạnh được vì UI gắn ?t=<updatedAt> làm cache-buster — đổi ảnh là URL đổi.
+  // (no-store cũ khiến mỗi lần xem chi tiết kéo lại ~2MB từ Supabase -> tốn egress.)
   return new Response(new Uint8Array(img.data), {
-    headers: { "content-type": img.mime, "cache-control": "no-store" },
+    headers: { "content-type": img.mime, "cache-control": "private, max-age=86400" },
   });
 }
 
