@@ -244,6 +244,13 @@ export function updateTemplate(id: string, input: UpdateTemplateInput) {
   if (input.waFlow !== undefined) data.waFlow = input.waFlow;
   if (input.autoReply !== undefined) data.autoReply = input.autoReply;
   if (input.quotationId !== undefined) data.quotationId = input.quotationId ? BigInt(input.quotationId) : null;
+  // Bật trả lời tự động cho mẫu này -> TẮT mọi mẫu khác (chỉ 1 mẫu reply active).
+  if (input.autoReply === true) {
+    return prisma.$transaction(async (tx) => {
+      await tx.template.updateMany({ where: { id: { not: BigInt(id) }, autoReply: true }, data: { autoReply: false } });
+      return tx.template.update({ where: { id: BigInt(id) }, data });
+    });
+  }
   return prisma.template.update({ where: { id: BigInt(id) }, data });
 }
 

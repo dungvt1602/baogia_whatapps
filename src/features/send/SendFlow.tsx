@@ -112,8 +112,18 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
   if (!res.ok) throw new Error(data?.error || `Lỗi ${res.status}`);
   return data as T;
 }
+async function patchJSON<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Lỗi ${res.status}`);
+  return data as T;
+}
 
-const STEPS = ["Chọn template", "Danh sách gửi", "Điền ảnh & gửi"];
+const STEPS = ["Chọn template", "Chọn template reply", "Danh sách gửi", "Điền ảnh & gửi"];
 function Stepper({
   step,
   maxStep,
@@ -184,7 +194,9 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   const [debouncedSearch, setDebouncedSearch] = useState(""); // từ khoá đã debounce -> gọi API
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [kind, setKind] = useState<"send" | "reply">("send"); // tab: mẫu báo giá | mẫu reply
+  // Bước 2 — chọn template reply (mẫu trả lời tự động khi khách phản hồi đợt gửi này)
+  const [replyTpls, setReplyTpls] = useState<(Template & { autoReply?: boolean })[]>([]);
+  const [selReply, setSelReply] = useState<Template | null>(null); // null = không trả lời tự động
 
   const [imgKey, setImgKey] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -204,7 +216,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   const loadTemplates = useCallback(async () => {
     try {
       const r = await getJSON<{ items: Template[]; total: number }>(
-        `/api/templates?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(debouncedSearch)}&kind=${kind}`,
+        `/api/templates?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(debouncedSearch)}&kind=send`,
       );
       setTemplates(r.items);
       setTotal(r.total);
@@ -214,7 +226,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     } finally {
       setLoadingT(false);
     }
-  }, [page, debouncedSearch, kind]);
+  }, [page, debouncedSearch]);
   useEffect(() => {
     (async () => {
       await loadTemplates();
@@ -226,6 +238,42 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(id);
   }, [search]);
+
+  // Tải danh sách mẫu REPLY (bước 2) — chọn sẵn mẫu đang bật trả lời tự động.
+  useEffect(() => {
+    getJSON<{ items: (Template & { autoReply?: boolean })[]; total: number }>(
+      "/api/templates?page=1&limit=50&kind=reply",
+    )
+      .then((r) => {
+        setReplyTpls(r.items);
+        setSelReply(r.items.find((t) => t.autoReply) || null);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Bước 2 -> 3: lưu lựa chọn mẫu reply (bật mẫu chọn — server tự tắt mẫu khác; chọn
+  // "Không trả lời" -> tắt mẫu đang bật).
+  const [savingReply, setSavingReply] = useState(false);
+  async function confirmReply() {
+    setSavingReply(true);
+    try {
+      if (selReply) {
+        await patchJSON(`/api/templates/${selReply.id}`, { autoReply: true });
+      } else {
+        const active = replyTpls.find((t) => (t as Template & { autoReply?: boolean }).autoReply);
+        if (active) await patchJSON(`/api/templates/${active.id}`, { autoReply: false });
+      }
+      setReplyTpls((list) =>
+        list.map((t) => ({ ...t, autoReply: selReply ? t.id === selReply.id : false })),
+      );
+      setStep(3);
+      setMaxStep(3);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingReply(false);
+    }
+  }
 
   // Bước 1 -> 2: chọn template + tạo preview (báo giá lấy từ chính template).
   const pickTemplate = useCallback(
@@ -250,13 +298,13 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     [actorName],
   );
 
-  // Bước 2 -> 3: sang bước điền ảnh
+  // Bước 3 -> 4: sang bước điền ảnh
   function goImage() {
     setHasImage(null);
     setSkipImage(false);
     setImgKey((k) => k + 1);
-    setStep(3);
-    setMaxStep(3);
+    setStep(4);
+    setMaxStep(4);
   }
 
   async function uploadImage(file: File | undefined) {
@@ -443,25 +491,6 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               {total} template
             </div>
           </div>
-          {/* 2 luồng: mẫu BÁO GIÁ / mẫu REPLY — mỗi tab chỉ hiện template loại đó */}
-          <div style={sx("display:flex; gap:8px; margin-bottom:12px")}>
-            {([["send", "📤 Template báo giá"], ["reply", "↩ Template reply"]] as ["send" | "reply", string][]).map(([val, label]) => {
-              const on = kind === val;
-              return (
-                <HButton
-                  key={val}
-                  s={`flex:1; border:1.5px solid ${on ? "#1F7440" : "#DCE3DC"}; background:${on ? "#1F7440" : "#fff"}; color:${on ? "#fff" : "#4A5A4E"}; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; height:40px`}
-                  onClick={() => {
-                    setKind(val);
-                    setPage(1);
-                    setSelTpl(null); // đổi luồng -> bỏ chọn mẫu cũ
-                  }}
-                >
-                  {label}
-                </HButton>
-              );
-            })}
-          </div>
           {/* Ô tìm kiếm template (tên / mã báo giá / tên template Meta) — tìm trên toàn bộ, server phân trang */}
           <div style={sx("position:relative; margin-bottom:12px")}>
             <span
@@ -566,8 +595,67 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
         </div>
       )}
 
-      {/* Bước 2: danh sách gửi (xem trước) */}
-      {step === 2 && preview && (
+      {/* Bước 2: chọn template REPLY — mẫu tự trả lời khi khách phản hồi đợt gửi này */}
+      {step === 2 && (
+        <div style={sx(card)}>
+          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:6px")}>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>
+              Chọn template reply
+            </div>
+            <HButton s={ghost} onClick={() => setStep(1)}>
+              ‹ Chọn lại template
+            </HButton>
+          </div>
+          <div style={sx("font-size:12.5px; color:#7B8A80; margin-bottom:12px")}>
+            Khách nhắn lại / bấm nút Flow sau đợt gửi sẽ nhận ngay mẫu này (kèm tên khách,
+            tối đa 1 lần/60 phút mỗi số). Chọn “Không trả lời tự động” nếu không muốn.
+          </div>
+          <div style={sx("display:flex; flex-direction:column; gap:10px")}>
+            <HButton
+              onClick={() => setSelReply(null)}
+              s={`display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:${selReply === null ? "#EAF3EC" : "#fff"}; border-width:1.5px; border-style:solid; border-color:${selReply === null ? "#3EA85C" : "#E9EEE9"}; border-radius:14px; padding:14px; cursor:pointer`}
+            >
+              <div style={sx("width:40px; height:40px; border-radius:11px; background:#F1F4F1; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>🚫</div>
+              <div style={sx("min-width:0; flex:1")}>
+                <div style={sx("font-size:14px; font-weight:700; color:#14261A")}>Không trả lời tự động</div>
+                <div style={sx("font-size:12.5px; color:#8B9A90")}>Khách nhắn lại chỉ hiện ở Hộp thư + báo sếp, không gửi gì cho khách.</div>
+              </div>
+              {selReply === null && <span style={sx("color:#1F7440; font-weight:700; flex-shrink:0")}>✓</span>}
+            </HButton>
+            {replyTpls.map((t) => {
+              const on = selReply?.id === t.id;
+              return (
+                <HButton
+                  key={t.id}
+                  onClick={() => setSelReply(t)}
+                  s={`display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:${on ? "#EAF3EC" : "#fff"}; border-width:1.5px; border-style:solid; border-color:${on ? "#3EA85C" : "#E9EEE9"}; border-radius:14px; padding:14px; cursor:pointer`}
+                >
+                  <div style={sx("width:40px; height:40px; border-radius:11px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>{t.icon || "↩"}</div>
+                  <div style={sx("min-width:0; flex:1")}>
+                    <div style={sx("font-size:14px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.name}</div>
+                    <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.waTemplateName || "—"}</div>
+                  </div>
+                  {on && <span style={sx("color:#1F7440; font-weight:700; flex-shrink:0")}>✓</span>}
+                </HButton>
+              );
+            })}
+            {replyTpls.length === 0 && (
+              <div style={sx("font-size:13px; color:#8B9A90; padding:6px 0")}>
+                Chưa có mẫu reply nào. Tạo ở menu Template và tích “Dùng làm mẫu TRẢ LỜI TỰ ĐỘNG”, hoặc chọn “Không trả lời tự động”.
+              </div>
+            )}
+          </div>
+          <HButton
+            s={`${green} width:100%; height:46px; margin-top:14px ${savingReply ? "; opacity:.6; pointer-events:none" : ""}`}
+            onClick={confirmReply}
+          >
+            {savingReply ? "Đang lưu..." : "Tiếp tục →"}
+          </HButton>
+        </div>
+      )}
+
+      {/* Bước 3: danh sách gửi (xem trước) */}
+      {step === 3 && preview && (
         <div style={sx(card)}>
           <div
             style={sx(
@@ -761,8 +849,8 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
         </div>
       )}
 
-      {/* Bước 3: điền ảnh & gửi */}
-      {step === 3 && selTpl && preview && (
+      {/* Bước 4: điền ảnh & gửi */}
+      {step === 4 && selTpl && preview && (
         <div style={sx(card)}>
           <div
             style={sx(
@@ -776,7 +864,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             >
               Ảnh gửi kèm — {selTpl.name}
             </div>
-            <HButton s={ghost} onClick={() => setStep(2)}>
+            <HButton s={ghost} onClick={() => setStep(3)}>
               ‹ Xem lại danh sách
             </HButton>
           </div>
