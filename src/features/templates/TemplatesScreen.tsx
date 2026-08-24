@@ -295,9 +295,11 @@ export default function TemplatesScreen() {
       waLanguage: form.waLanguage,
       waCategory: form.waCategory,
       waBodyParams: form.waBodyParams,
-      // Luôn gửi bằng template Meta + luôn kèm nút Flow (mọi template đều có Flow).
+      // Luôn gửi bằng template Meta. Nút Flow: mẫu GỬI báo giá đều có Flow (=true);
+      // mẫu TRẢ LỜI tự động (auto_response) không có nút -> không gửi kèm (=false),
+      // gửi kèm cho mẫu không có nút là Meta báo lỗi.
       sendAsText: false,
-      waFlow: true,
+      waFlow: !form.autoReply,
       autoReply: form.autoReply,
     };
     try {
@@ -627,6 +629,7 @@ export default function TemplatesScreen() {
             <span style={sx("color:#6B7C6E; font-size:12px")}>
               Khách reply hoặc bấm nút Flow là gửi ngay mẫu này (kèm tên khách).
               Mỗi số chỉ trả lời 1 lần/60 phút. Chỉ nên bật cho 1 mẫu.
+              Mẫu trả lời KHÔNG gửi kèm nút Flow (mẫu gửi báo giá thì luôn kèm).
             </span>
           </span>
         </label>
