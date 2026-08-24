@@ -123,7 +123,7 @@ async function patchJSON<T>(url: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-const STEPS = ["Chọn template", "Chọn template reply", "Danh sách gửi", "Điền ảnh & gửi"];
+const STEPS = ["Chọn template", "Danh sách gửi", "Chọn template reply", "Điền ảnh & gửi"];
 function Stepper({
   step,
   maxStep,
@@ -251,8 +251,8 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
       .catch(() => {});
   }, []);
 
-  // Bước 2 -> 3: lưu lựa chọn mẫu reply (bật mẫu chọn — server tự tắt mẫu khác; chọn
-  // "Không trả lời" -> tắt mẫu đang bật).
+  // Bước 3 -> 4: lưu lựa chọn mẫu reply (bật mẫu chọn — server tự tắt mẫu khác; chọn
+  // "Không trả lời" -> tắt mẫu đang bật) rồi sang bước điền ảnh.
   const [savingReply, setSavingReply] = useState(false);
   async function confirmReply() {
     setSavingReply(true);
@@ -266,8 +266,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
       setReplyTpls((list) =>
         list.map((t) => ({ ...t, autoReply: selReply ? t.id === selReply.id : false })),
       );
-      setStep(3);
-      setMaxStep(3);
+      goImage(); // sang bước 4
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -298,7 +297,13 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     [actorName],
   );
 
-  // Bước 3 -> 4: sang bước điền ảnh
+  // Bước 2 -> 3: sang bước chọn template reply
+  function goReply() {
+    setStep(3);
+    setMaxStep(3);
+  }
+
+  // -> Bước 4: sang bước điền ảnh
   function goImage() {
     setHasImage(null);
     setSkipImage(false);
@@ -595,15 +600,15 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
         </div>
       )}
 
-      {/* Bước 2: chọn template REPLY — mẫu tự trả lời khi khách phản hồi đợt gửi này */}
-      {step === 2 && (
+      {/* Bước 3: chọn template REPLY — mẫu tự trả lời khi khách phản hồi đợt gửi này */}
+      {step === 3 && (
         <div style={sx(card)}>
           <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:6px")}>
             <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>
               Chọn template reply
             </div>
-            <HButton s={ghost} onClick={() => setStep(1)}>
-              ‹ Chọn lại template
+            <HButton s={ghost} onClick={() => setStep(2)}>
+              ‹ Xem lại danh sách
             </HButton>
           </div>
           <div style={sx("font-size:12.5px; color:#7B8A80; margin-bottom:12px")}>
@@ -654,8 +659,8 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
         </div>
       )}
 
-      {/* Bước 3: danh sách gửi (xem trước) */}
-      {step === 3 && preview && (
+      {/* Bước 2: danh sách gửi (xem trước) */}
+      {step === 2 && preview && (
         <div style={sx(card)}>
           <div
             style={sx(
@@ -797,8 +802,8 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               Khách nhận ({preview.recipients.length})
             </div>
             <div style={sx("display:flex; gap:10px; margin:20px 0 6px;")}>
-              <HButton s={`${green} flex:1`} onClick={goImage}>
-                Tiếp tục → điền ảnh
+              <HButton s={`${green} flex:1`} onClick={goReply}>
+                Tiếp tục → chọn template reply
               </HButton>
             </div>
           </div>
@@ -841,11 +846,6 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             ))}
           </div>
 
-          {/* <div style={sx("display:flex; gap:10px; margin-top:20px")}>
-            <HButton s={`${green} flex:1`} onClick={goImage}>
-              Tiếp tục → điền ảnh
-            </HButton>
-          </div> */}
         </div>
       )}
 
@@ -865,7 +865,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               Ảnh gửi kèm — {selTpl.name}
             </div>
             <HButton s={ghost} onClick={() => setStep(3)}>
-              ‹ Xem lại danh sách
+              ‹ Chọn lại template reply
             </HButton>
           </div>
           <div
