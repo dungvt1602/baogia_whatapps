@@ -33,6 +33,7 @@ type InboundLike = {
   fromPhone: string;
   fromName?: string | null;
   channel?: string;
+  customerId?: bigint | null;
   customer?: { name: string } | null;
 };
 
@@ -48,6 +49,15 @@ export async function maybeAutoReply(msg: InboundLike): Promise<void> {
       orderBy: { id: "asc" },
     });
     if (!tpl) return; // chưa cấu hình -> im lặng
+
+    // 1b) Khách đã phản hồi -> TỰ GẮN vào danh sách khách của mẫu reply (tích lũy
+    // "tập khách đã phản hồi"; trùng thì bỏ qua). Chạy TRƯỚC cooldown để lần nào
+    // reply cũng được gắn, kể cả khi không gửi tin trả lời.
+    if (msg.customerId) {
+      await prisma.templateCustomer
+        .createMany({ data: [{ templateId: tpl.id, customerId: msg.customerId }], skipDuplicates: true })
+        .catch(() => {}); // lỗi gắn link không phá luồng trả lời
+    }
 
     // 2) Cooldown: số này đã được trả lời trong X phút qua -> thôi.
     const since = new Date(Date.now() - COOLDOWN_MIN() * 60 * 1000);
