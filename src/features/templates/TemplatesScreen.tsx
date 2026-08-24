@@ -249,7 +249,7 @@ export default function TemplatesScreen() {
       // Mẫu mới trên Meta mặc định dùng biến có tên -> điền sẵn cấu hình phổ biến nhất.
       waBodyParams: "customer_name={khách hàng}",
       sendAsText: false,
-      waFlow: false,
+      waFlow: true, // đa số mẫu gửi có nút Flow; mẫu không có thì bỏ tích
       autoReply: false,
     });
   }
@@ -295,11 +295,10 @@ export default function TemplatesScreen() {
       waLanguage: form.waLanguage,
       waCategory: form.waCategory,
       waBodyParams: form.waBodyParams,
-      // Luôn gửi bằng template Meta. Nút Flow: mẫu GỬI báo giá đều có Flow (=true);
-      // mẫu TRẢ LỜI tự động (auto_response) không có nút -> không gửi kèm (=false),
-      // gửi kèm cho mẫu không có nút là Meta báo lỗi.
+      // Luôn gửi bằng template Meta. Nút Flow theo checkbox từng mẫu — phải khớp
+      // mẫu đã duyệt trên Meta (có nút mà không gửi kèm, hoặc ngược lại, đều lỗi).
       sendAsText: false,
-      waFlow: !form.autoReply,
+      waFlow: form.waFlow,
       autoReply: form.autoReply,
     };
     try {
@@ -614,6 +613,26 @@ export default function TemplatesScreen() {
         </div>
         <label
           style={sx(
+            "display:flex; align-items:flex-start; gap:9px; margin-bottom:10px; cursor:pointer",
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={form.waFlow}
+            onChange={(e) => setForm({ ...form, waFlow: e.target.checked })}
+            style={sx("margin-top:3px; width:16px; height:16px; accent-color:#3EA85C")}
+          />
+          <span style={sx("font-size:13px; color:#14261A; line-height:1.45")}>
+            Mẫu Meta có <b>nút Flow</b> (đặt lịch/booking)
+            <br />
+            <span style={sx("color:#6B7C6E; font-size:12px")}>
+              Tích đúng theo mẫu đã duyệt trên Meta: mẫu có nút mà không tích (hoặc
+              ngược lại) đều bị Meta báo lỗi khi gửi.
+            </span>
+          </span>
+        </label>
+        <label
+          style={sx(
             "display:flex; align-items:flex-start; gap:9px; margin-bottom:12px; cursor:pointer",
           )}
         >
@@ -629,7 +648,6 @@ export default function TemplatesScreen() {
             <span style={sx("color:#6B7C6E; font-size:12px")}>
               Khách reply hoặc bấm nút Flow là gửi ngay mẫu này (kèm tên khách).
               Mỗi số chỉ trả lời 1 lần/60 phút. Chỉ nên bật cho 1 mẫu.
-              Mẫu trả lời KHÔNG gửi kèm nút Flow (mẫu gửi báo giá thì luôn kèm).
             </span>
           </span>
         </label>
