@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordInbound, summarizeMessage, updateDeliveryStatus } from "@/server/services/inboundService";
 import { notifyInboundReply } from "@/server/services/notificationService";
+import { maybeAutoReply } from "@/server/services/autoReplyService";
 
 // Webhook WhatsApp (Meta gọi vào). Cần URL public + khai ở Meta App Dashboard:
 //   Callback URL: https://<domain>/api/webhooks/whatsapp
@@ -56,6 +57,10 @@ export async function POST(req: NextRequest) {
           if (id && status) await updateDeliveryStatus(id, status, errText);
         }
 
+        // Tên hiển thị WhatsApp của người gửi (pushname) -> khách lạ cũng có tên để chào.
+        const contacts = Array.isArray(value.contacts) ? (value.contacts as Record<string, unknown>[]) : [];
+        const profileName = String((contacts[0]?.profile as Record<string, unknown> | undefined)?.name || "");
+
         // Tin khách gửi đến (trả lời / bấm nút Flow).
         const messages = Array.isArray(value.messages) ? (value.messages as Record<string, unknown>[]) : [];
         for (const m of messages) {
@@ -63,13 +68,17 @@ export async function POST(req: NextRequest) {
           const saved = await recordInbound({
             waMessageId: String(m?.id || "") || null,
             fromPhone: String(m?.from || ""),
+            fromName: profileName || null,
             kind: s.kind,
             type: s.type,
             text: s.text,
             raw: m,
           });
-          // Tin MỚI (không trùng) -> báo sếp (đọc kênh nhận từ DB; no-op nếu chưa cấu hình).
-          if (saved) await notifyInboundReply(saved);
+          if (saved) {
+            // Tin MỚI (không trùng) -> báo sếp + TRẢ LỜI TỰ ĐỘNG bằng template (nếu bật).
+            await notifyInboundReply(saved);
+            await maybeAutoReply(saved);
+          }
         }
       }
     }

@@ -35,6 +35,7 @@ type TplDetail = {
   waBodyParams: string | null;
   sendAsText: boolean;
   waFlow: boolean;
+  autoReply: boolean;
   createdAt: string;
   quotation: TplQuotation | null;
   channel: { id: string; name: string; type: string; accountId: string } | null;
@@ -65,6 +66,7 @@ type TplForm = {
   waBodyParams: string;
   sendAsText: boolean;
   waFlow: boolean;
+  autoReply: boolean;
 };
 
 const card =
@@ -246,6 +248,7 @@ export default function TemplatesScreen() {
       waBodyParams: "customer_name={khách hàng}",
       sendAsText: false,
       waFlow: false,
+      autoReply: false,
     });
   }
   async function openEdit() {
@@ -266,6 +269,7 @@ export default function TemplatesScreen() {
       waBodyParams: detail.waBodyParams || "",
       sendAsText: detail.sendAsText,
       waFlow: !!detail.waFlow,
+      autoReply: !!detail.autoReply,
     });
   }
   async function saveForm() {
@@ -292,6 +296,7 @@ export default function TemplatesScreen() {
       // Luôn gửi bằng template Meta + luôn kèm nút Flow (mọi template đều có Flow).
       sendAsText: false,
       waFlow: true,
+      autoReply: form.autoReply,
     };
     try {
       if (form.id) {
@@ -603,6 +608,26 @@ export default function TemplatesScreen() {
             </label>
           </div>
         </div>
+        <label
+          style={sx(
+            "display:flex; align-items:flex-start; gap:9px; margin-bottom:12px; cursor:pointer",
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={form.autoReply}
+            onChange={(e) => setForm({ ...form, autoReply: e.target.checked })}
+            style={sx("margin-top:3px; width:16px; height:16px; accent-color:#3EA85C")}
+          />
+          <span style={sx("font-size:13px; color:#14261A; line-height:1.45")}>
+            Dùng làm mẫu <b>TRẢ LỜI TỰ ĐỘNG</b> khi khách nhắn / bấm Flow
+            <br />
+            <span style={sx("color:#6B7C6E; font-size:12px")}>
+              Khách reply hoặc bấm nút Flow là gửi ngay mẫu này (kèm tên khách).
+              Mỗi số chỉ trả lời 1 lần/60 phút. Chỉ nên bật cho 1 mẫu.
+            </span>
+          </span>
+        </label>
           </>
         )}
         <div style={sx("display:flex; gap:10px; margin-top:6px")}>
@@ -863,7 +888,7 @@ export default function TemplatesScreen() {
           value={detail?.waTemplateName || "— (chưa khai)"}
           sub={
             detail
-              ? `${detail.waCategory || "—"} · ${detail.waLanguage}${detail.waImage ? " · kèm ảnh" : ""}${detail.waFlow ? " · nút Flow" : ""}`
+              ? `${detail.waCategory || "—"} · ${detail.waLanguage}${detail.waImage ? " · kèm ảnh" : ""}${detail.waFlow ? " · nút Flow" : ""}${detail.autoReply ? " · TRẢ LỜI TỰ ĐỘNG" : ""}`
               : undefined
           }
         />

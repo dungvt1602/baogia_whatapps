@@ -201,6 +201,7 @@ model Template {
   // Trống -> 1 biến vị trí = tên khách (giữ nguyên hành vi cũ).
   waBodyParams   String? @map("wa_body_params") @db.VarChar(500)
   waFlow         Boolean @default(true) @map("wa_flow") // mọi template đều có nút Flow -> luôn gửi kèm component nút Flow (giống bot)
+  autoReply      Boolean @default(false) @map("auto_reply") // mẫu TRẢ LỜI tự động khi khách reply/bấm Flow (chỉ nên bật 1 mẫu)
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamp(6)
@@ -228,6 +229,8 @@ model TemplateImage {
   templateId  BigInt   @id @map("template_id")
   data        Bytes? // bytes ảnh (legacy — ảnh mới lưu Supabase Storage, cột này null)
   storagePath String?  @map("storage_path") @db.VarChar(255) // path trong bucket template-images
+  waMediaId   String?  @map("wa_media_id") @db.VarChar(255) // cache media id WhatsApp (đỡ upload lại mỗi lần trả lời tự động)
+  waMediaAt   DateTime? @map("wa_media_at") @db.Timestamp(6) // lúc upload media (media Meta sống ~30 ngày)
   mime        String   @default("image/png") @db.VarChar(50)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
 
@@ -420,6 +423,7 @@ model InboundMessage {
   type        String?  @db.VarChar(30) // text | interactive | button | image...
   text        String?  @db.Text // nội dung đã tóm tắt để hiển thị
   raw         Json? // payload gốc để soi khi cần
+  autoReplied Boolean  @default(false) @map("auto_replied") // đã gửi template trả lời tự động cho tin này
   receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamp(6)
 
   customer       Customer?       @relation(fields: [customerId], references: [id])
