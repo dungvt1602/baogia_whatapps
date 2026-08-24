@@ -18,6 +18,7 @@ type Tpl = {
   name: string;
   icon: string | null;
   waTemplateName: string | null;
+  autoReply: boolean;
   quotation: { id: string; code: string; title: string | null } | null;
   channel: { id: string; name: string; type: string } | null;
   _count: { customerLinks: number };
@@ -147,20 +148,21 @@ export default function TemplatesScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState(""); // từ khoá đã debounce -> gọi API
   const [lpage, setLpage] = useState(1); // trang danh sách
   const [total, setTotal] = useState(0); // tổng số template khớp (server trả về)
+  const [kind, setKind] = useState(""); // lọc: "" tất cả | "send" mẫu gửi | "reply" mẫu trả lời
   const [err, setErr] = useState("");
 
   // Danh sách template phân trang server-side — chịu được nhiều template (vd 1000).
   const loadTemplates = useCallback(async () => {
     try {
       const r = await getJSON<{ items: Tpl[]; total: number }>(
-        `/api/templates?page=${lpage}&limit=12&search=${encodeURIComponent(debouncedSearch)}`,
+        `/api/templates?page=${lpage}&limit=12&search=${encodeURIComponent(debouncedSearch)}&kind=${kind}`,
       );
       setTemplates(r.items);
       setTotal(r.total);
     } catch (e) {
       setErr((e as Error).message);
     }
-  }, [lpage, debouncedSearch]);
+  }, [lpage, debouncedSearch, kind]);
   useEffect(() => {
     (async () => {
       await loadTemplates();
@@ -720,6 +722,18 @@ export default function TemplatesScreen() {
               placeholder="Tìm tên template hoặc mã báo giá..."
             />
           </div>
+          {([["", "Tất cả"], ["send", "Mẫu gửi"], ["reply", "↩ Mẫu trả lời"]] as [string, string][]).map(([val, label]) => {
+            const on = kind === val;
+            return (
+              <HButton
+                key={val}
+                s={`border:1px solid ${on ? "#1F7440" : "#DCE3DC"}; background:${on ? "#1F7440" : "#fff"}; color:${on ? "#fff" : "#4A5A4E"}; border-radius:8px; font-size:12.5px; font-weight:600; cursor:pointer; padding:0 12px; height:34px`}
+                onClick={() => { setKind(val); setLpage(1); }}
+              >
+                {label}
+              </HButton>
+            );
+          })}
           <div style={sx("font-size:13px; color:#7B8A80; flex:1")}>
             {total} template
           </div>
@@ -756,10 +770,13 @@ export default function TemplatesScreen() {
               <div style={sx("min-width:0; flex:1")}>
                 <div
                   style={sx(
-                    "font-size:15px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis",
+                    "font-size:15px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px",
                   )}
                 >
-                  {t.name}
+                  <span style={sx("overflow:hidden; text-overflow:ellipsis")}>{t.name}</span>
+                  {t.autoReply && (
+                    <span style={sx("flex-shrink:0; font-size:10.5px; font-weight:700; color:#1F7440; background:#E7F5EC; border:1px solid #CDE8D5; border-radius:5px; padding:1px 7px")}>↩ Trả lời</span>
+                  )}
                 </div>
                 <div
                   style={sx(

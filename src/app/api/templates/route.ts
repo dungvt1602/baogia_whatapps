@@ -14,6 +14,7 @@ export async function GET(req: Request) {
           search: sp.get("search"),
           page: Number(sp.get("page")) || 1,
           limit: Number(sp.get("limit")) || 12,
+          kind: sp.get("kind"), // reply | send | rỗng
         }),
       500,
     );

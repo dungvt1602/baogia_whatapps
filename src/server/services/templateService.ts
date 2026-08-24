@@ -28,19 +28,23 @@ export async function listTemplatesPaged(params: {
   search?: string | null;
   page?: number;
   limit?: number;
+  kind?: string | null; // "reply" = mẫu trả lời tự động | "send" = mẫu gửi báo giá | rỗng = tất cả
 }) {
   const kw = (params.search || "").trim();
   const page = Math.max(1, params.page || 1);
   const limit = Math.min(100, Math.max(1, params.limit || 12));
-  const where = kw
-    ? {
-        OR: [
-          { name: { contains: kw, mode: "insensitive" as const } },
-          { waTemplateName: { contains: kw, mode: "insensitive" as const } },
-          { quotation: { code: { contains: kw, mode: "insensitive" as const } } },
-        ],
-      }
-    : {};
+  const where = {
+    ...(kw
+      ? {
+          OR: [
+            { name: { contains: kw, mode: "insensitive" as const } },
+            { waTemplateName: { contains: kw, mode: "insensitive" as const } },
+            { quotation: { code: { contains: kw, mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
+    ...(params.kind === "reply" ? { autoReply: true } : params.kind === "send" ? { autoReply: false } : {}),
+  };
   const [items, total] = await Promise.all([
     prisma.template.findMany({
       where,
