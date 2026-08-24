@@ -326,7 +326,9 @@ export async function processNextBatch() {
         data: {
           status: permanent || rc >= MAX_RETRY ? "FAILED" : "QUEUED",
           error: msg,
-          retryCount: rc,
+          // Lỗi vĩnh viễn: đẩy retryCount lên trần luôn — nếu chỉ set FAILED mà rc<3,
+          // câu chọn job (FAILED AND retryCount<3) vẫn nhặt lại và bắn thêm 2 lần vô ích.
+          retryCount: permanent ? Math.max(rc, MAX_RETRY) : rc,
         },
       });
     }
