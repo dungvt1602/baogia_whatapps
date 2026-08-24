@@ -184,6 +184,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   const [debouncedSearch, setDebouncedSearch] = useState(""); // từ khoá đã debounce -> gọi API
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [kind, setKind] = useState<"send" | "reply">("send"); // tab: mẫu báo giá | mẫu reply
 
   const [imgKey, setImgKey] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -203,7 +204,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   const loadTemplates = useCallback(async () => {
     try {
       const r = await getJSON<{ items: Template[]; total: number }>(
-        `/api/templates?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(debouncedSearch)}`,
+        `/api/templates?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(debouncedSearch)}&kind=${kind}`,
       );
       setTemplates(r.items);
       setTotal(r.total);
@@ -213,7 +214,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     } finally {
       setLoadingT(false);
     }
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, kind]);
   useEffect(() => {
     (async () => {
       await loadTemplates();
@@ -441,6 +442,25 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             >
               {total} template
             </div>
+          </div>
+          {/* 2 luồng: mẫu BÁO GIÁ / mẫu REPLY — mỗi tab chỉ hiện template loại đó */}
+          <div style={sx("display:flex; gap:8px; margin-bottom:12px")}>
+            {([["send", "📤 Template báo giá"], ["reply", "↩ Template reply"]] as ["send" | "reply", string][]).map(([val, label]) => {
+              const on = kind === val;
+              return (
+                <HButton
+                  key={val}
+                  s={`flex:1; border:1.5px solid ${on ? "#1F7440" : "#DCE3DC"}; background:${on ? "#1F7440" : "#fff"}; color:${on ? "#fff" : "#4A5A4E"}; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; height:40px`}
+                  onClick={() => {
+                    setKind(val);
+                    setPage(1);
+                    setSelTpl(null); // đổi luồng -> bỏ chọn mẫu cũ
+                  }}
+                >
+                  {label}
+                </HButton>
+              );
+            })}
           </div>
           {/* Ô tìm kiếm template (tên / mã báo giá / tên template Meta) — tìm trên toàn bộ, server phân trang */}
           <div style={sx("position:relative; margin-bottom:12px")}>
