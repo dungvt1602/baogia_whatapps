@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON } from "@/components/common/api";
 import { getSupabaseBrowser } from "@/components/common/supabase";
 
@@ -29,6 +29,7 @@ const PER = 20;
 
 export default function InboxScreen() {
   const [rows, setRows] = useState<Reply[]>([]);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -36,7 +37,9 @@ export default function InboxScreen() {
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try { setRows(await getJSON<Reply[]>("/api/inbound")); } catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => { (async () => { await load(); })(); }, [load]);
 
@@ -111,7 +114,8 @@ export default function InboxScreen() {
             </tr>
           </thead>
           <tbody>
-            {view.length === 0 && <tr><td colSpan={7} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có phản hồi nào. Khách trả lời qua WhatsApp sẽ hiện ở đây (cần bật webhook).</td></tr>}
+            {loading && <SkeletonRows cols={7} cellStyle={gtd} />}
+            {!loading && view.length === 0 && <tr><td colSpan={7} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có phản hồi nào. Khách trả lời qua WhatsApp sẽ hiện ở đây (cần bật webhook).</td></tr>}
             {paged.map((r, i) => (
               <tr key={r.id} style={sx(`background:${i % 2 ? "#FBFDFB" : "#fff"}`)}>
                 <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(curPage - 1) * PER + i + 1}</td>

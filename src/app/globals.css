@@ -54,6 +54,22 @@ textarea {
     opacity: 1;
   }
 }
+/* Skeleton loading (bảng danh sách) — thanh xám chạy sáng dần, thay cho chớp
+   "Chưa có dữ liệu" trước khi API trả về. */
+@keyframes agoShimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.ago-skeleton {
+  background-image: linear-gradient(90deg, #eef1ee 25%, #e4e9e4 37%, #eef1ee 63%);
+  background-size: 400% 100%;
+  animation: agoShimmer 1.4s ease infinite;
+  border-radius: 5px;
+}
 
 /* Responsive: lưới nhiều cột tự gộp 1 cột trên màn hẹp (override style inline). */
 @media (max-width: 720px) {

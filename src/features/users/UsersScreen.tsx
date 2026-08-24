@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
 import { toast } from "sonner";
 
@@ -44,6 +44,7 @@ function Badge({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
 
 export default function UsersScreen() {
   const [rows, setRows] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Form | null>(null);
   const [detail, setDetail] = useState<User | null>(null);
   const [pending, setPending] = useState<{ text: string; run: () => Promise<void> } | null>(null);
@@ -54,7 +55,9 @@ export default function UsersScreen() {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "username", dir: "asc" });
 
   const load = useCallback(async () => {
+    setLoading(true);
     try { setRows(await getJSON<User[]>("/api/users")); } catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => {
     (async () => { await load(); })();
@@ -144,7 +147,8 @@ export default function UsersScreen() {
             </tr>
           </thead>
           <tbody>
-            {view.length === 0 && <tr><td colSpan={8} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có người dùng nào.</td></tr>}
+            {loading && <SkeletonRows cols={8} cellStyle={gtd} />}
+            {!loading && view.length === 0 && <tr><td colSpan={8} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có người dùng nào.</td></tr>}
             {paged.map((u, i) => {
               const on = selected.has(u.id);
               return (

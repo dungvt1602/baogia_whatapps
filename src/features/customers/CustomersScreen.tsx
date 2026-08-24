@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
 import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
 import { applyDial, findCountry, splitPhone } from "@/components/common/countries";
@@ -125,6 +125,7 @@ function Field({ label, value, onChange, placeholder, error }: { label: string; 
 
 export default function CustomersScreen() {
   const [rows, setRows] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true); // đang tải lần đầu -> hiện khung xương thay vì "chưa có dữ liệu"
   const [form, setForm] = useState<Form | null>(null);
   const [err, setErr] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -141,10 +142,12 @@ export default function CustomersScreen() {
   const [markets, setMarkets] = useState<string[]>([]); // danh sách quốc gia cho dropdown
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const qs = market ? `?market=${encodeURIComponent(market)}` : "";
       setRows(await getJSON<Customer[]>(`/api/customers${qs}`));
     } catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
   }, [market]);
   useEffect(() => {
     (async () => { await load(); })();
@@ -335,7 +338,8 @@ export default function CustomersScreen() {
             </tr>
           </thead>
           <tbody>
-            {view.length === 0 && (
+            {loading && <SkeletonRows cols={11} cellStyle={gtd} />}
+            {!loading && view.length === 0 && (
               <tr><td colSpan={11} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có khách hàng nào.</td></tr>
             )}
             {paged.map((c, i) => {

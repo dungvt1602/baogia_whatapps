@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonBar } from "@/components/common/ui";
 import { toast } from "sonner";
 
 // ---- kiểu dữ liệu trả về từ API (BigInt -> string) ----
@@ -517,8 +517,16 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             />
           </div>
           {loadingT && (
-            <div style={sx("font-size:13px; color:#8B9A90")}>
-              Đang tải template...
+            <div style={sx("display:flex; flex-direction:column; gap:8px")}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} style={sx("display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px; background:#fff")}>
+                  <div className="ago-skeleton" style={sx("width:38px; height:38px; border-radius:11px; flex-shrink:0")} />
+                  <div style={sx("min-width:0; flex:1; display:flex; flex-direction:column; gap:7px")}>
+                    <SkeletonBar w="55%" h="13px" />
+                    <SkeletonBar w="70%" h="10px" />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
           {busy && (

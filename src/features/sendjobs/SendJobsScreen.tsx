@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON } from "@/components/common/api";
 
 type Job = {
@@ -42,6 +42,7 @@ const PER = 15;
 
 export default function SendJobsScreen() {
   const [rows, setRows] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<Job | null>(null);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
@@ -50,7 +51,9 @@ export default function SendJobsScreen() {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "createdAt", dir: "desc" });
 
   const load = useCallback(async () => {
+    setLoading(true);
     try { setRows(await getJSON<Job[]>("/api/send-jobs")); } catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => { (async () => { await load(); })(); }, [load]);
 
@@ -134,7 +137,8 @@ export default function SendJobsScreen() {
             </tr>
           </thead>
           <tbody>
-            {view.length === 0 && <tr><td colSpan={9} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có log gửi nào.</td></tr>}
+            {loading && <SkeletonRows cols={9} cellStyle={gtd} />}
+            {!loading && view.length === 0 && <tr><td colSpan={9} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có log gửi nào.</td></tr>}
             {paged.map((j, i) => (
               <tr key={j.id} style={sx(`background:${i % 2 ? "#FBFDFB" : "#fff"}`)}>
                 <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(curPage - 1) * PER + i + 1}</td>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON } from "@/components/common/api";
 
 type Log = {
@@ -33,6 +33,7 @@ function ResultBadge({ r }: { r: string | null }) {
 
 export default function LogsScreen() {
   const [rows, setRows] = useState<Log[]>([]);
+  const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<Log | null>(null);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
@@ -40,7 +41,9 @@ export default function LogsScreen() {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "createdAt", dir: "desc" });
 
   const load = useCallback(async () => {
+    setLoading(true);
     try { setRows(await getJSON<Log[]>("/api/activity")); } catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => {
     (async () => { await load(); })();
@@ -106,7 +109,8 @@ export default function LogsScreen() {
             </tr>
           </thead>
           <tbody>
-            {view.length === 0 && <tr><td colSpan={8} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có nhật ký nào.</td></tr>}
+            {loading && <SkeletonRows cols={8} cellStyle={gtd} />}
+            {!loading && view.length === 0 && <tr><td colSpan={8} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có nhật ký nào.</td></tr>}
             {paged.map((l, i) => (
               <tr key={l.id} style={sx(`background:${i % 2 ? "#FBFDFB" : "#fff"}`)}>
                 <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(curPage - 1) * 15 + i + 1}</td>

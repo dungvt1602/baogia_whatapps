@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { sx, HButton } from "@/components/common/ui";
+import { sx, HButton, SkeletonBar } from "@/components/common/ui";
 import { getJSON } from "@/components/common/api";
 
 type Activity = {
@@ -118,8 +118,25 @@ export default function DashboardScreen() {
         </div>
       )}
       {!s && !err && (
-        <div style={sx(card + "; font-size:13px; color:#8B9A90")}>
-          Đang tải số liệu...
+        <div
+          style={sx(
+            "display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px",
+          )}
+        >
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={sx(card)}>
+              <div style={sx("display:flex; align-items:center; gap:8px")}>
+                <div className="ago-skeleton" style={sx("width:34px; height:34px; border-radius:10px; flex-shrink:0")} />
+                <SkeletonBar w="60%" h="11px" />
+              </div>
+              <div style={sx("margin-top:14px")}>
+                <SkeletonBar w="45%" h="26px" />
+              </div>
+              <div style={sx("margin-top:10px")}>
+                <SkeletonBar w="70%" h="11px" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -113,3 +113,53 @@ export function HTextarea({ s, focus, ...rest }: TaProps) {
     />
   );
 }
+
+// 1 thanh xám nhấp nháy (khung xương) — dùng bên trong ô bảng lúc đang tải.
+export function SkeletonBar({ w = "70%", h = "12px" }: { w?: string; h?: string }) {
+  return <div className="ago-skeleton" style={sx(`height:${h}; width:${w}`)} />;
+}
+
+// N dòng khung xương khớp đúng số cột của bảng — thay cho chớp "Chưa có dữ liệu"
+// trong lúc chờ API trả về lần đầu. `cellStyle` truyền đúng token gtd của màn đó
+// để border/padding khớp các dòng thật.
+// Khung xương dạng CARD (icon tròn + 2 dòng chữ) — dùng cho lưới template/dashboard.
+export function SkeletonCard() {
+  return (
+    <div
+      style={sx(
+        "display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:16px",
+      )}
+    >
+      <div className="ago-skeleton" style={sx("width:44px; height:44px; border-radius:12px; flex-shrink:0")} />
+      <div style={sx("min-width:0; flex:1; display:flex; flex-direction:column; gap:8px")}>
+        <SkeletonBar w="65%" h="14px" />
+        <SkeletonBar w="45%" h="11px" />
+      </div>
+    </div>
+  );
+}
+
+const SKELETON_WIDTHS = ["82%", "55%", "68%", "40%", "60%", "48%", "74%", "36%"];
+export function SkeletonRows({
+  cols,
+  rows = 6,
+  cellStyle,
+}: {
+  cols: number;
+  rows?: number;
+  cellStyle: string;
+}) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, r) => (
+        <tr key={r}>
+          {Array.from({ length: cols }).map((_, c) => (
+            <td key={c} style={sx(cellStyle)}>
+              <SkeletonBar w={SKELETON_WIDTHS[(r + c) % SKELETON_WIDTHS.length]} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}

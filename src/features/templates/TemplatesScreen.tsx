@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonCard } from "@/components/common/ui";
 import {
   getJSON,
   postJSON,
@@ -139,6 +139,7 @@ export default function TemplatesScreen() {
   const selT = m ? decodeURIComponent(m[1]) : ""; // id lấy TỪ URL
 
   const [templates, setTemplates] = useState<Tpl[]>([]);
+  const [loadingT, setLoadingT] = useState(true);
   const [detail, setDetail] = useState<TplDetail | null>(null);
   const [customers, setCustomers] = useState<Cust[]>([]);
   const [channels, setChannels] = useState<Ch[]>([]);
@@ -153,6 +154,7 @@ export default function TemplatesScreen() {
 
   // Danh sách template phân trang server-side — chịu được nhiều template (vd 1000).
   const loadTemplates = useCallback(async () => {
+    setLoadingT(true);
     try {
       const r = await getJSON<{ items: Tpl[]; total: number }>(
         `/api/templates?page=${lpage}&limit=12&search=${encodeURIComponent(debouncedSearch)}&kind=${kind}`,
@@ -161,6 +163,8 @@ export default function TemplatesScreen() {
       setTotal(r.total);
     } catch (e) {
       setErr((e as Error).message);
+    } finally {
+      setLoadingT(false);
     }
   }, [lpage, debouncedSearch, kind]);
   useEffect(() => {
@@ -762,7 +766,7 @@ export default function TemplatesScreen() {
             + Tạo template
           </HButton>
         </div>
-        {total === 0 && (
+        {!loadingT && total === 0 && (
           <div style={sx(card + "; font-size:13px; color:#8B9A90")}>
             {debouncedSearch
               ? "Không tìm thấy template khớp."
@@ -774,7 +778,8 @@ export default function TemplatesScreen() {
             "display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px",
           )}
         >
-          {templates.map((t) => (
+          {loadingT && Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          {!loadingT && templates.map((t) => (
             <HButton
               key={t.id}
               onClick={() => openDetail(t.id)}

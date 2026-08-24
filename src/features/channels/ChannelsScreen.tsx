@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
 import { toast } from "sonner";
 
@@ -39,6 +39,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 
 export default function ChannelsScreen() {
   const [rows, setRows] = useState<Channel[]>([]);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Form | null>(null);
   const [detail, setDetail] = useState<Channel | null>(null);
   const [pending, setPending] = useState<{ text: string; run: () => Promise<void> } | null>(null);
@@ -49,7 +50,9 @@ export default function ChannelsScreen() {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
 
   const load = useCallback(async () => {
+    setLoading(true);
     try { setRows(await getJSON<Channel[]>("/api/channels")); } catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => {
     (async () => { await load(); })();
@@ -140,7 +143,8 @@ export default function ChannelsScreen() {
             </tr>
           </thead>
           <tbody>
-            {view.length === 0 && <tr><td colSpan={9} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có kênh nào.</td></tr>}
+            {loading && <SkeletonRows cols={9} cellStyle={gtd} />}
+            {!loading && view.length === 0 && <tr><td colSpan={9} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Chưa có kênh nào.</td></tr>}
             {paged.map((c, i) => {
               const on = selected.has(c.id);
               return (
