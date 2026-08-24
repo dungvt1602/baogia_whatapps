@@ -219,6 +219,17 @@ export function listPoolTemplates() {
   });
 }
 
+// Gắn HÀNG LOẠT khách vào template (trùng thì bỏ qua) — dùng khi chọn mẫu reply
+// trong wizard gửi: toàn bộ khách của đợt gửi được gắn vào mẫu reply đã chọn.
+export async function linkCustomersToTemplate(templateId: string, customerIds: (string | number)[]) {
+  if (!customerIds.length) return { linked: 0 };
+  const r = await prisma.templateCustomer.createMany({
+    data: customerIds.map((cid) => ({ templateId: BigInt(templateId), customerId: BigInt(cid) })),
+    skipDuplicates: true,
+  });
+  return { linked: r.count };
+}
+
 export async function listTemplateCustomers(templateId: string) {
   const links = await prisma.templateCustomer.findMany({
     where: { templateId: BigInt(templateId) },

@@ -15,7 +15,6 @@ type Template = {
   channel: { id: string; name: string; type: string } | null;
   _count: { customerLinks: number };
 };
-type ReplyCustomer = { id: string; name: string; phone: string | null; whatsappPhone: string | null };
 type Recipient = { id: string; name: string; phone: string };
 type PItem = {
   no: number;
@@ -198,8 +197,6 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   // Bước 2 — chọn template reply (mẫu trả lời tự động khi khách phản hồi đợt gửi này)
   const [replyTpls, setReplyTpls] = useState<(Template & { autoReply?: boolean })[]>([]);
   const [selReply, setSelReply] = useState<Template | null>(null); // null = không trả lời tự động
-  const [replyCustomers, setReplyCustomers] = useState<ReplyCustomer[]>([]); // khách đã gắn mẫu reply đang chọn
-  const [loadingReplyCust, setLoadingReplyCust] = useState(false);
 
   const [imgKey, setImgKey] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -254,23 +251,6 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
       .catch(() => {});
   }, []);
 
-  // Đổi mẫu reply đang chọn -> tải danh sách khách ĐÃ GẮN mẫu đó (giống danh sách
-  // người nhận ở bước 2), để xem trước ai sẽ nhận mẫu này khi họ phản hồi.
-  const loadReplyCustomers = useCallback(async (tplId: string) => {
-    setLoadingReplyCust(true);
-    try {
-      setReplyCustomers(await getJSON<ReplyCustomer[]>(`/api/templates/${tplId}/customers`));
-    } catch {
-      setReplyCustomers([]);
-    } finally {
-      setLoadingReplyCust(false);
-    }
-  }, []);
-  useEffect(() => {
-    if (!selReply) return; // danh sách chỉ hiện khi có chọn mẫu -> ẩn đi, không cần dọn ngay
-    (async () => { await loadReplyCustomers(selReply.id); })();
-  }, [selReply, loadReplyCustomers]);
-
   // Bước 3 -> 4: lưu lựa chọn mẫu reply (bật mẫu chọn — server tự tắt mẫu khác; chọn
   // "Không trả lời" -> tắt mẫu đang bật) rồi sang bước điền ảnh.
   const [savingReply, setSavingReply] = useState(false);
@@ -279,6 +259,13 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     try {
       if (selReply) {
         await patchJSON(`/api/templates/${selReply.id}`, { autoReply: true });
+        // Gắn TOÀN BỘ khách của đợt gửi này vào mẫu reply (trùng bỏ qua) — danh sách
+        // nhận reply khớp đúng danh sách gửi báo giá.
+        if (preview?.recipients.length) {
+          await postJSON(`/api/templates/${selReply.id}/customers/link`, {
+            customerIds: preview.recipients.map((r) => r.id),
+          });
+        }
       } else {
         const active = replyTpls.find((t) => (t as Template & { autoReply?: boolean }).autoReply);
         if (active) await patchJSON(`/api/templates/${active.id}`, { autoReply: false });
@@ -679,41 +666,24 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             )}
           </div>
 
-          {/* Danh sách khách ĐÃ GẮN mẫu reply đang chọn — giống danh sách người nhận ở bước 2,
-              để xem trước ai sẽ nhận mẫu này khi họ phản hồi. */}
-          {selReply && (
+          {/* Danh sách người nhận mẫu reply = ĐÚNG danh sách gửi báo giá đợt này (bước 2).
+              Bấm Tiếp tục sẽ gắn toàn bộ khách này vào mẫu reply đã chọn. */}
+          {selReply && preview && (
             <div style={sx("margin-top:16px; padding-top:14px; border-top:1px solid #EFF3EF")}>
               <div style={sx("font-size:13.5px; font-weight:700; color:#14261A; margin-bottom:8px")}>
-                Khách đã phản hồi (nhận mẫu này khi nhắn lại) — {replyCustomers.length}
+                Khách nhận mẫu reply khi nhắn lại (theo danh sách gửi) — {preview.recipients.length}
               </div>
-              {loadingReplyCust && (
-                <div style={sx("display:flex; flex-direction:column; gap:6px")}>
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
-                      <div className="ago-skeleton" style={sx("width:30px; height:30px; border-radius:50%; flex-shrink:0")} />
-                      <SkeletonBar w="45%" h="12px" />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {!loadingReplyCust && replyCustomers.length === 0 && (
-                <div style={sx("font-size:12.5px; color:#8B9A90; padding:6px 0")}>
-                  Chưa có khách nào — mẫu này sẽ tự gắn khách ngay khi họ reply lần đầu.
-                </div>
-              )}
-              {!loadingReplyCust && replyCustomers.length > 0 && (
-                <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto")}>
-                  {replyCustomers.map((r) => (
-                    <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
-                      <span style={sx("width:30px; height:30px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0")}>
-                        {r.name.trim().split(/\s+/).slice(-2).map((x) => x[0]).join("").toUpperCase()}
-                      </span>
-                      <span style={sx("font-size:13.5px; font-weight:600; color:#14261A; flex:1")}>{r.name}</span>
-                      <span style={sx("font-size:12.5px; color:#8B9A90")}>{r.whatsappPhone || r.phone || "(thiếu SĐT)"}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto")}>
+                {preview.recipients.map((r) => (
+                  <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
+                    <span style={sx("width:30px; height:30px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0")}>
+                      {r.name.trim().split(/\s+/).slice(-2).map((x) => x[0]).join("").toUpperCase()}
+                    </span>
+                    <span style={sx("font-size:13.5px; font-weight:600; color:#14261A; flex:1")}>{r.name}</span>
+                    <span style={sx("font-size:12.5px; color:#8B9A90")}>{r.phone || "(thiếu SĐT)"}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
