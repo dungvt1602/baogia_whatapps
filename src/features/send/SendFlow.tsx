@@ -15,6 +15,7 @@ type Template = {
   channel: { id: string; name: string; type: string } | null;
   _count: { customerLinks: number };
 };
+type ReplyCustomer = { id: string; name: string; phone: string | null; whatsappPhone: string | null };
 type Recipient = { id: string; name: string; phone: string };
 type PItem = {
   no: number;
@@ -197,6 +198,8 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
   // Bước 2 — chọn template reply (mẫu trả lời tự động khi khách phản hồi đợt gửi này)
   const [replyTpls, setReplyTpls] = useState<(Template & { autoReply?: boolean })[]>([]);
   const [selReply, setSelReply] = useState<Template | null>(null); // null = không trả lời tự động
+  const [replyCustomers, setReplyCustomers] = useState<ReplyCustomer[]>([]); // khách đã gắn mẫu reply đang chọn
+  const [loadingReplyCust, setLoadingReplyCust] = useState(false);
 
   const [imgKey, setImgKey] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -250,6 +253,23 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
       })
       .catch(() => {});
   }, []);
+
+  // Đổi mẫu reply đang chọn -> tải danh sách khách ĐÃ GẮN mẫu đó (giống danh sách
+  // người nhận ở bước 2), để xem trước ai sẽ nhận mẫu này khi họ phản hồi.
+  const loadReplyCustomers = useCallback(async (tplId: string) => {
+    setLoadingReplyCust(true);
+    try {
+      setReplyCustomers(await getJSON<ReplyCustomer[]>(`/api/templates/${tplId}/customers`));
+    } catch {
+      setReplyCustomers([]);
+    } finally {
+      setLoadingReplyCust(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (!selReply) return; // danh sách chỉ hiện khi có chọn mẫu -> ẩn đi, không cần dọn ngay
+    (async () => { await loadReplyCustomers(selReply.id); })();
+  }, [selReply, loadReplyCustomers]);
 
   // Bước 3 -> 4: lưu lựa chọn mẫu reply (bật mẫu chọn — server tự tắt mẫu khác; chọn
   // "Không trả lời" -> tắt mẫu đang bật) rồi sang bước điền ảnh.
@@ -646,7 +666,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
                   <div style={sx("width:40px; height:40px; border-radius:11px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>{t.icon || "↩"}</div>
                   <div style={sx("min-width:0; flex:1")}>
                     <div style={sx("font-size:14px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.name}</div>
-                    <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.waTemplateName || "—"}</div>
+                    <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.waTemplateName || "—"} · {t._count.customerLinks} khách đã phản hồi</div>
                   </div>
                   {on && <span style={sx("color:#1F7440; font-weight:700; flex-shrink:0")}>✓</span>}
                 </HButton>
@@ -658,6 +678,45 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               </div>
             )}
           </div>
+
+          {/* Danh sách khách ĐÃ GẮN mẫu reply đang chọn — giống danh sách người nhận ở bước 2,
+              để xem trước ai sẽ nhận mẫu này khi họ phản hồi. */}
+          {selReply && (
+            <div style={sx("margin-top:16px; padding-top:14px; border-top:1px solid #EFF3EF")}>
+              <div style={sx("font-size:13.5px; font-weight:700; color:#14261A; margin-bottom:8px")}>
+                Khách đã phản hồi (nhận mẫu này khi nhắn lại) — {replyCustomers.length}
+              </div>
+              {loadingReplyCust && (
+                <div style={sx("display:flex; flex-direction:column; gap:6px")}>
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
+                      <div className="ago-skeleton" style={sx("width:30px; height:30px; border-radius:50%; flex-shrink:0")} />
+                      <SkeletonBar w="45%" h="12px" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!loadingReplyCust && replyCustomers.length === 0 && (
+                <div style={sx("font-size:12.5px; color:#8B9A90; padding:6px 0")}>
+                  Chưa có khách nào — mẫu này sẽ tự gắn khách ngay khi họ reply lần đầu.
+                </div>
+              )}
+              {!loadingReplyCust && replyCustomers.length > 0 && (
+                <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto")}>
+                  {replyCustomers.map((r) => (
+                    <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
+                      <span style={sx("width:30px; height:30px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0")}>
+                        {r.name.trim().split(/\s+/).slice(-2).map((x) => x[0]).join("").toUpperCase()}
+                      </span>
+                      <span style={sx("font-size:13.5px; font-weight:600; color:#14261A; flex:1")}>{r.name}</span>
+                      <span style={sx("font-size:12.5px; color:#8B9A90")}>{r.whatsappPhone || r.phone || "(thiếu SĐT)"}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <HButton
             s={`${green} width:100%; height:46px; margin-top:14px ${savingReply ? "; opacity:.6; pointer-events:none" : ""}`}
             onClick={confirmReply}
