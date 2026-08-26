@@ -66,7 +66,6 @@ type TplForm = {
   waCategory: string;
   waBodyParams: string;
   sendAsText: boolean;
-  waFlow: boolean;
   autoReply: boolean;
 };
 
@@ -279,7 +278,7 @@ export default function TemplatesScreen() {
       // Mẫu mới trên Meta mặc định dùng biến có tên -> điền sẵn cấu hình phổ biến nhất.
       waBodyParams: "customer_name={khách hàng}",
       sendAsText: false,
-      waFlow: true, // đa số mẫu gửi có nút Flow; mẫu không có thì bỏ tích
+
       autoReply: false,
     });
   }
@@ -300,7 +299,7 @@ export default function TemplatesScreen() {
       waCategory: detail.waCategory || "MARKETING",
       waBodyParams: detail.waBodyParams || "",
       sendAsText: detail.sendAsText,
-      waFlow: !!detail.waFlow,
+
       autoReply: !!detail.autoReply,
     });
   }
@@ -328,7 +327,7 @@ export default function TemplatesScreen() {
       // Luôn gửi bằng template Meta. Nút Flow theo checkbox từng mẫu — phải khớp
       // mẫu đã duyệt trên Meta (có nút mà không gửi kèm, hoặc ngược lại, đều lỗi).
       sendAsText: false,
-      waFlow: form.waFlow,
+
       autoReply: form.autoReply,
     };
     try {
@@ -641,26 +640,14 @@ export default function TemplatesScreen() {
             </label>
           </div>
         </div>
-        <label
+        <div
           style={sx(
-            "display:flex; align-items:flex-start; gap:9px; margin-bottom:10px; cursor:pointer",
+            "font-size:11.5px; color:#7B8A80; background:#F6F9F6; border:1px solid #E9EEE9; border-radius:9px; padding:8px 11px; margin-bottom:12px; line-height:1.5",
           )}
         >
-          <input
-            type="checkbox"
-            checked={form.waFlow}
-            onChange={(e) => setForm({ ...form, waFlow: e.target.checked })}
-            style={sx("margin-top:3px; width:16px; height:16px; accent-color:#3EA85C")}
-          />
-          <span style={sx("font-size:13px; color:#14261A; line-height:1.45")}>
-            Mẫu Meta có <b>nút Flow</b> (đặt lịch/booking)
-            <br />
-            <span style={sx("color:#6B7C6E; font-size:12px")}>
-              Tích đúng theo mẫu đã duyệt trên Meta: mẫu có nút mà không tích (hoặc
-              ngược lại) đều bị Meta báo lỗi khi gửi.
-            </span>
-          </span>
-        </label>
+          🔍 <b>Nút Flow / ảnh header tự phát hiện</b>: khi Lưu, hệ thống tra mẫu trên Meta
+          theo tên và tự cấu hình đúng — chỉ cần gõ đúng tên mẫu. Gõ sai tên sẽ báo lỗi ngay.
+        </div>
         <label
           style={sx(
             "display:flex; align-items:flex-start; gap:9px; margin-bottom:12px; cursor:pointer",

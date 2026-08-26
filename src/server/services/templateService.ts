@@ -9,6 +9,22 @@ import {
   downloadImageFromStorage,
   deleteImageFromStorage,
 } from "@/server/lib/storage";
+import { getMetaTemplateDef } from "@/server/services/metaSyncService";
+
+// TỰ PHÁT HIỆN cờ từ Meta theo tên mẫu (lúc tạo/sửa template) — người dùng KHỎI tích
+// "có nút Flow" nữa. Tra không được (chưa WABA/lỗi mạng) -> {} giữ giá trị hiện có;
+// Meta không có mẫu tên này -> ném lỗi (bắt gõ sai tên ngay lúc lưu).
+async function detectMetaFlags(waTemplateName?: string | null): Promise<{ waFlow?: boolean; waImage?: boolean }> {
+  if (!waTemplateName) return {};
+  const def = await getMetaTemplateDef(waTemplateName);
+  if (!def) return {};
+  if (!def.found) {
+    throw new Error(
+      `Không tìm thấy mẫu "${waTemplateName}" trên Meta — kiểm tra lại tên (phải đúng y tên mẫu đã tạo trên WhatsApp Manager).`,
+    );
+  }
+  return { waFlow: def.hasFlow, waImage: def.hasImageHeader };
+}
 
 export function listTemplates() {
   return prisma.template.findMany({
@@ -160,7 +176,8 @@ export function listTemplatesByQuotation(quotationId: string) {
   });
 }
 
-export function createTemplate(quotationId: string, input: CreateTemplateInput) {
+export async function createTemplate(quotationId: string, input: CreateTemplateInput) {
+  const metaFlags = await detectMetaFlags(input.waTemplateName);
   return prisma.template.create({
     data: {
       quotationId: BigInt(quotationId),
@@ -176,6 +193,7 @@ export function createTemplate(quotationId: string, input: CreateTemplateInput) 
       ...(input.waImage != null ? { waImage: input.waImage } : {}),
       ...(input.waFlow != null ? { waFlow: input.waFlow } : {}),
       ...(input.autoReply != null ? { autoReply: input.autoReply } : {}),
+      ...metaFlags, // cờ tự phát hiện từ Meta GHI ĐÈ giá trị tay
     },
   });
 }
@@ -184,6 +202,8 @@ export function createTemplate(quotationId: string, input: CreateTemplateInput) 
 // vào chi tiết template gắn báo giá thủ công. Mỗi template có bảng giá riêng; sửa
 // mặt hàng/giá của báo giá này trong trang chi tiết template.
 export async function createStandaloneTemplate(input: CreateTemplateInput) {
+  // Tra Meta TRƯỚC khi tạo báo giá kèm — gõ sai tên mẫu thì chặn ngay, không để báo giá mồ côi.
+  const metaFlags = await detectMetaFlags(input.waTemplateName);
   const quotation = await createQuotation({
     title: input.name ? `Báo giá ${input.name}` : null,
   });
@@ -203,6 +223,7 @@ export async function createStandaloneTemplate(input: CreateTemplateInput) {
       ...(input.waImage != null ? { waImage: input.waImage } : {}),
       ...(input.waFlow != null ? { waFlow: input.waFlow } : {}),
       ...(input.autoReply != null ? { autoReply: input.autoReply } : {}),
+      ...metaFlags, // cờ tự phát hiện từ Meta GHI ĐÈ giá trị tay
     },
   });
 }
@@ -239,8 +260,10 @@ export async function listTemplateCustomers(templateId: string) {
   return links.map((l) => l.customer);
 }
 
-export function updateTemplate(id: string, input: UpdateTemplateInput) {
+export async function updateTemplate(id: string, input: UpdateTemplateInput) {
   const data: Record<string, unknown> = {};
+  // Có khai tên mẫu Meta -> tra lại định nghĩa thật, tự set cờ Flow/ảnh (ghi đè phía dưới).
+  const metaFlags = input.waTemplateName ? await detectMetaFlags(input.waTemplateName) : {};
   if (input.name !== undefined) data.name = input.name;
   if (input.subject !== undefined) data.subject = input.subject ?? null; // tên sản phẩm
   if (input.icon !== undefined) data.icon = input.icon;
@@ -255,6 +278,7 @@ export function updateTemplate(id: string, input: UpdateTemplateInput) {
   if (input.waFlow !== undefined) data.waFlow = input.waFlow;
   if (input.autoReply !== undefined) data.autoReply = input.autoReply;
   if (input.quotationId !== undefined) data.quotationId = input.quotationId ? BigInt(input.quotationId) : null;
+  Object.assign(data, metaFlags); // cờ tự phát hiện từ Meta GHI ĐÈ giá trị tay
   // Bật trả lời tự động cho mẫu này -> TẮT mọi mẫu khác (chỉ 1 mẫu reply active).
   if (input.autoReply === true) {
     return prisma.$transaction(async (tx) => {

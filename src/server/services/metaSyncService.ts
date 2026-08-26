@@ -90,6 +90,35 @@ async function fetchMetaTemplates(wabaId: string): Promise<Map<string, { hasFlow
   return map;
 }
 
+// Tra 1 mẫu theo TÊN trên Meta (dùng lúc tạo/sửa template trong app).
+// - null        = KHÔNG tra được (chưa có WABA / lỗi mạng) -> caller giữ giá trị hiện có
+// - found:false = tra được nhưng Meta KHÔNG có mẫu tên này (gõ sai tên)
+export async function getMetaTemplateDef(name: string): Promise<{ found: boolean; hasFlow: boolean; hasImageHeader: boolean; status: string } | null> {
+  let wabaId: string;
+  try {
+    wabaId = await resolveWabaId();
+  } catch {
+    return null;
+  }
+  try {
+    const d = await graphGet(`/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=name,language,status,components&limit=20`);
+    const exact = (((d.data as MetaTemplate[] | undefined) || [])).filter((t) => t.name === name);
+    if (!exact.length) return { found: false, hasFlow: false, hasImageHeader: false, status: "" };
+    const best = exact.find((t) => t.status === "APPROVED") || exact[0];
+    const comps = best.components || [];
+    const header = comps.find((c) => (c.type || "").toUpperCase() === "HEADER");
+    const types = (comps.find((c) => (c.type || "").toUpperCase() === "BUTTONS")?.buttons || []).map((b) => (b.type || "").toUpperCase());
+    return {
+      found: true,
+      hasFlow: types.includes("FLOW"),
+      hasImageHeader: (header?.format || "").toUpperCase() === "IMAGE",
+      status: best.status || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Đồng bộ: đối chiếu từng template trong app với định nghĩa Meta -> sửa cờ lệch.
 export async function syncTemplatesFromMeta() {
   const wabaId = await resolveWabaId();
