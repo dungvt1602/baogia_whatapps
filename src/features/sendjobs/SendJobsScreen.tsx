@@ -28,14 +28,20 @@ const gth = "padding:7px 10px; font-size:11.5px; font-weight:700; color:#33475B;
 const gtd = "padding:6px 10px; font-size:12.5px; color:#1B2A20; border:1px solid #E4EAEF; white-space:nowrap; background:inherit";
 const fmtDate = (s: string | null) => (s ? new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(s)) : "—");
 
+// Vòng đời tin: Chờ gửi -> Đang gửi -> Đã gửi (Meta nhận) -> Đã tới máy -> Đã đọc.
+// Duy nhất "Thất bại" là KHÔNG gửi được; DELIVERED/READ tốt hơn cả "Đã gửi".
 function StatusBadge({ s }: { s: string }) {
   const u = (s || "").toUpperCase();
-  const ok = u === "SENT";
-  const bad = u === "FAILED";
-  const bg = ok ? "#E7F5EC" : bad ? "#FDECEC" : "#F1F4F1";
-  const fg = ok ? "#1F7440" : bad ? "#B3261E" : "#8B9A90";
-  const label = ok ? "Đã gửi" : bad ? "Thất bại" : u === "QUEUED" ? "Chờ gửi" : u === "SENDING" ? "Đang gửi" : u || "—";
-  return <span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:${bg}; color:${fg}`)}>{label}</span>;
+  const M: Record<string, { label: string; bg: string; fg: string }> = {
+    QUEUED: { label: "Chờ gửi", bg: "#F1F4F1", fg: "#8B9A90" },
+    SENDING: { label: "Đang gửi", bg: "#FDF3E0", fg: "#B07208" },
+    SENT: { label: "Đã gửi", bg: "#E7F5EC", fg: "#1F7440" },
+    DELIVERED: { label: "✓✓ Tới máy", bg: "#DCF0E2", fg: "#166534" },
+    READ: { label: "👁 Đã đọc", bg: "#DBEAFE", fg: "#1D4ED8" },
+    FAILED: { label: "Thất bại", bg: "#FDECEC", fg: "#B3261E" },
+  };
+  const v = M[u] || { label: u || "—", bg: "#F1F4F1", fg: "#8B9A90" };
+  return <span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; white-space:nowrap; background:${v.bg}; color:${v.fg}`)}>{v.label}</span>;
 }
 
 const PER = 15;
@@ -60,7 +66,10 @@ export default function SendJobsScreen() {
   const view = useMemo(() => {
     const kw = q.trim().toLowerCase();
     const arr = rows.filter((j) => {
-      if (fStatus !== "all" && (j.status || "").toUpperCase() !== fStatus) return false;
+      const u = (j.status || "").toUpperCase();
+      // "OK" = nhóm gửi thành công (Meta nhận / tới máy / đã đọc)
+      if (fStatus === "OK" && !["SENT", "DELIVERED", "READ"].includes(u)) return false;
+      if (fStatus !== "all" && fStatus !== "OK" && u !== fStatus) return false;
       if (!kw) return true;
       return [j.toName, j.toPhone, j.customer?.company, j.messageId, j.error, j.batch?.template?.name].some((v) => (v || "").toLowerCase().includes(kw));
     });
@@ -78,7 +87,8 @@ export default function SendJobsScreen() {
   function onSort(key: SortKey) { setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" })); }
   const arrow = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
 
-  const sentCount = rows.filter((j) => (j.status || "").toUpperCase() === "SENT").length;
+  const sentCount = rows.filter((j) => ["SENT", "DELIVERED", "READ"].includes((j.status || "").toUpperCase())).length;
+  const readCount = rows.filter((j) => (j.status || "").toUpperCase() === "READ").length;
   const failCount = rows.filter((j) => (j.status || "").toUpperCase() === "FAILED").length;
 
   function exportCsv() {
@@ -115,7 +125,8 @@ export default function SendJobsScreen() {
           <HInput s={`${inp} height:34px; padding-left:32px`} focus={focus} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Tìm khách, công ty, SĐT, template..." />
         </div>
         {filterBtn("all", "Tất cả")}
-        {filterBtn("SENT", `Đã gửi (${sentCount})`)}
+        {filterBtn("OK", `Gửi thành công (${sentCount})`)}
+        {filterBtn("READ", `👁 Đã đọc (${readCount})`)}
         {filterBtn("FAILED", `Thất bại (${failCount})`)}
         <div style={sx("flex:1")} />
         <HButton s={ghost} onClick={load}>↻ Tải lại</HButton>
@@ -179,7 +190,7 @@ export default function SendJobsScreen() {
                 ["Công ty", detail.customer?.company || "—"],
                 ["Số điện thoại", detail.toPhone || "—"],
                 ["Kênh", detail.channel],
-                ["Trạng thái", (detail.status || "").toUpperCase() === "SENT" ? "Đã gửi" : (detail.status || "").toUpperCase() === "FAILED" ? "Thất bại" : detail.status],
+                ["Trạng thái", ({ QUEUED: "Chờ gửi", SENDING: "Đang gửi", SENT: "Đã gửi (Meta nhận)", DELIVERED: "Đã tới máy khách", READ: "Khách đã đọc", FAILED: "Thất bại" } as Record<string, string>)[(detail.status || "").toUpperCase()] || detail.status],
                 ["Template", detail.batch?.template?.name || "—"],
                 ["Message ID", detail.messageId || "—"],
                 ["Lỗi", detail.error || "—"],
