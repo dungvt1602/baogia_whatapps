@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordInbound, summarizeMessage, updateDeliveryStatus } from "@/server/services/inboundService";
 import { notifyInboundReply } from "@/server/services/notificationService";
 import { maybeAutoReply } from "@/server/services/autoReplyService";
+import { captureWabaId } from "@/server/services/metaSyncService";
 
 // Webhook WhatsApp (Meta gọi vào). Cần URL public + khai ở Meta App Dashboard:
 //   Callback URL: https://<domain>/api/webhooks/whatsapp
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
   try {
     const entries = Array.isArray((body as { entry?: unknown[] }).entry) ? (body as { entry: unknown[] }).entry : [];
     for (const entry of entries) {
+      // entry.id = WABA ID -> tự lưu lại để tính năng "Đồng bộ Meta" dùng (không cần khai tay).
+      await captureWabaId(String((entry as { id?: unknown }).id || ""));
       const changes = Array.isArray((entry as { changes?: unknown[] }).changes) ? (entry as { changes: unknown[] }).changes : [];
       for (const change of changes) {
         const value = ((change as { value?: unknown }).value || {}) as Record<string, unknown>;

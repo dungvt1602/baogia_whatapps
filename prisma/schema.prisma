@@ -409,6 +409,15 @@ model ReceiveChannel {
   @@map("receive_channels")
 }
 
+// Cài đặt hệ thống dạng key-value (vd waba_id tự bắt từ webhook WhatsApp).
+model AppSetting {
+  key       String   @id @db.VarChar(100)
+  value     String   @db.Text
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("app_settings")
+}
+
 // Tin nhắn KHÁCH TRẢ LỜI (đến từ webhook WhatsApp). Khớp customer theo SĐT.
 // kind: message = khách nhắn thường; flow_response = khách bấm nút Flow (đặt lịch...).
 model InboundMessage {

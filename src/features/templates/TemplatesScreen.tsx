@@ -140,6 +140,7 @@ export default function TemplatesScreen() {
 
   const [templates, setTemplates] = useState<Tpl[]>([]);
   const [loadingT, setLoadingT] = useState(true);
+  const [syncing, setSyncing] = useState(false); // đang đồng bộ định nghĩa mẫu từ Meta
   const [detail, setDetail] = useState<TplDetail | null>(null);
   const [customers, setCustomers] = useState<Cust[]>([]);
   const [channels, setChannels] = useState<Ch[]>([]);
@@ -237,6 +238,31 @@ export default function TemplatesScreen() {
   }
 
   // ---- Tạo / sửa / xóa template ----
+  // Đồng bộ định nghĩa mẫu từ Meta -> tự sửa cờ nút Flow / ảnh header cho khớp mẫu thật.
+  async function syncMeta() {
+    setSyncing(true);
+    try {
+      const r = await postJSON<{ updated: number; checked: number; notFound: string[]; results: { template: string; changes: string[] }[] }>(
+        "/api/templates/sync-meta",
+        {},
+      );
+      const changed = r.results.filter((x) => x.changes.length);
+      if (changed.length) {
+        toast.success(`Đồng bộ Meta: sửa ${r.updated}/${r.checked} template`);
+        changed.forEach((c) => toast.info(`${c.template}: ${c.changes.join("; ")}`, { duration: 8000 }));
+      } else {
+        toast.success(`Đồng bộ Meta: ${r.checked} template đều đã khớp, không phải sửa gì`);
+      }
+      if (r.notFound.length) toast.warning(`Không thấy trên Meta: ${r.notFound.join(", ")}`, { duration: 8000 });
+      await loadTemplates();
+      if (selT) await loadDetail(selT);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   function openCreate() {
     getJSON<Ch[]>("/api/channels")
       .then(setChannels)
@@ -762,6 +788,13 @@ export default function TemplatesScreen() {
           <div style={sx("font-size:13px; color:#7B8A80; flex:1")}>
             {total} template
           </div>
+          <HButton
+            s={`${ghost} ${syncing ? "opacity:.5; pointer-events:none" : ""}`}
+            title="Đọc định nghĩa mẫu thật trên Meta -> tự set cờ nút Flow / ảnh header đúng cho mọi template"
+            onClick={syncMeta}
+          >
+            {syncing ? "Đang đồng bộ..." : "⟳ Đồng bộ Meta"}
+          </HButton>
           <HButton s={green} onClick={openCreate}>
             + Tạo template
           </HButton>
