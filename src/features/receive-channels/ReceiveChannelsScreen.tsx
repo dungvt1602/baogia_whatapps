@@ -26,7 +26,10 @@ const ghost = "border:1px solid #DCE3DC; border-radius:8px; background:#fff; col
 const lbl = "font-size:12px; font-weight:600; color:#3C4A40; margin-bottom:4px";
 const gth = "padding:7px 10px; font-size:11.5px; font-weight:700; color:#33475B; background:#EEF2F5; border:1px solid #D3DCE3; white-space:nowrap; user-select:none; text-align:left; position:sticky; top:0";
 const gtd = "padding:6px 10px; font-size:12.5px; color:#1B2A20; border:1px solid #E4EAEF; white-space:nowrap; background:inherit";
-const empty = (): Form => ({ name: "", type: "TELEGRAM", accountId: "", apiKeyEnv: "", note: "", isActive: true });
+// Biến env chứa token theo loại kênh — người dùng KHÔNG phải nhập: Telegram luôn là TELEGRAM_BOT_TOKEN_MAIN,
+// Zalo lấy token từ kết nối OA (màn Zalo OA) nên giá trị này chỉ là chỗ điền cho đủ.
+const DEFAULT_ENV: Record<string, string> = { TELEGRAM: "TELEGRAM_BOT_TOKEN_MAIN", ZALO: "ZALO_OA_TOKEN_MAIN" };
+const empty = (): Form => ({ name: "", type: "ZALO", accountId: "", apiKeyEnv: DEFAULT_ENV.ZALO, note: "", isActive: true });
 
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string }) {
   return (
@@ -81,12 +84,13 @@ export default function ReceiveChannelsScreen() {
   function openEdit(c: Channel) { setForm({ id: c.id, name: c.name, type: c.type, accountId: c.accountId, apiKeyEnv: c.apiKeyEnv, note: c.note || "", isActive: c.isActive }); }
   async function save() {
     if (!form?.name) return toast.error("Nhập tên kênh");
-    if (!form?.accountId) return toast.error("Nhập chat id / user id người nhận");
-    if (!form?.apiKeyEnv) return toast.error("Nhập tên biến env (token bot)");
+    if (!form?.accountId) return toast.error(form.type === "ZALO" ? "Nhập SĐT Zalo người nhận" : "Nhập chat id Telegram người nhận");
+    // Biến env tự điền theo loại (người dùng không thấy ô này nữa).
+    const payload = { ...form, apiKeyEnv: form.apiKeyEnv || DEFAULT_ENV[form.type] || DEFAULT_ENV.TELEGRAM };
     const editing = !!form.id;
     try {
-      if (form.id) await patchJSON(`/api/receive-channels/${form.id}`, form);
-      else await postJSON("/api/receive-channels", form);
+      if (form.id) await patchJSON(`/api/receive-channels/${form.id}`, payload);
+      else await postJSON("/api/receive-channels", payload);
       setForm(null); await load();
       toast.success(editing ? "Đã cập nhật kênh nhận" : "Đã thêm kênh nhận");
     } catch (e) { toast.error((e as Error).message); }
@@ -109,7 +113,7 @@ export default function ReceiveChannelsScreen() {
   }
 
   const cols: { key: SortKey; label: string }[] = [
-    { key: "name", label: "Tên kênh" }, { key: "type", label: "Loại" }, { key: "accountId", label: "Người nhận (chat/user id)" }, { key: "apiKeyEnv", label: "Biến env token (.env)" },
+    { key: "name", label: "Tên kênh" }, { key: "type", label: "Loại" }, { key: "accountId", label: "Người nhận (SĐT Zalo / chat id)" }, { key: "apiKeyEnv", label: "Token lấy từ" },
   ];
 
   return (
@@ -154,7 +158,7 @@ export default function ReceiveChannelsScreen() {
                   <td style={sx(gtd + "; font-weight:600; color:#1F7440; cursor:pointer; text-decoration:underline")} onClick={() => setDetail(c)} title="Xem chi tiết">{c.name}</td>
                   <td style={sx(gtd)}><span style={sx("font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:#EAF0F6; color:#33475B")}>{c.type}</span></td>
                   <td style={sx(gtd + "; min-width:130px")} title={c.accountId}>{c.accountId}</td>
-                  <td style={sx(gtd + "; font-family:monospace; color:#6B7A70")} title="Tên biến trong .env — KHÔNG phải giá trị thật">{c.apiKeyEnv}</td>
+                  <td style={sx(gtd + "; font-family:monospace; color:#6B7A70")} title={c.type === "ZALO" ? "Token Zalo lấy từ kết nối OA (màn Zalo OA)" : "Tên biến trong .env — KHÔNG phải giá trị thật"}>{c.type === "ZALO" ? "kết nối OA" : c.apiKeyEnv}</td>
                   <td style={sx(gtd + "; text-align:center")}><span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:${c.isActive ? "#E7F5EC" : "#FDECEC"}; color:${c.isActive ? "#1F7440" : "#B3261E"}`)}>{c.isActive ? "Bật" : "Tắt"}</span></td>
                   <td style={sx(gtd + "; min-width:120px; color:#7B8A80")} title={c.note || ""}>{c.note || "—"}</td>
                   <td style={sx(gtd + "; text-align:center")}>
@@ -174,7 +178,7 @@ export default function ReceiveChannelsScreen() {
         <HButton s={`${ghost} ${curPage <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage - 1)}>‹ Trước</HButton>
         <HButton s={`${ghost} ${curPage >= totalPages ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage + 1)}>Sau ›</HButton>
       </div>
-      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>🔒 DB chỉ lưu <b>tên biến env</b> chứa token, token thật nằm trong .env/Render. Đây là <b>đích báo sếp</b>: khi khách reply, server đẩy thông báo tới các kênh (Telegram/Zalo) đang bật ở đây.</div>
+      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Đây là <b>đích báo sếp</b>: khi khách reply, server đẩy thông báo tới mọi kênh đang bật ở đây. Zalo: nhập SĐT Zalo (người đó cần đã Quan tâm OA) — hoặc tự kích hoạt bằng nút <b>Ⓩ Kích hoạt Zalo</b> ở sidebar. Telegram: chat id của người đã bấm /start bot.</div>
 
       {form && (
         <div style={sx("position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px")}>
@@ -189,16 +193,24 @@ export default function ReceiveChannelsScreen() {
               <div style={sx("width:150px")}>
                 <label style={sx("display:flex; flex-direction:column; margin-bottom:12px")}>
                   <span style={sx(lbl)}>Loại</span>
-                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={sx(inp)}>
+                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, apiKeyEnv: DEFAULT_ENV[e.target.value] || form.apiKeyEnv })} style={sx(inp)}>
                     <option value="TELEGRAM">TELEGRAM</option>
                     <option value="ZALO">ZALO</option>
                   </select>
                 </label>
               </div>
             </div>
-            <Field label="Chat ID / User ID / SĐT Zalo người nhận *" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} placeholder="Telegram chat id / Zalo user_id hoặc SĐT Zalo (84…)" />
-            <Field label="Tên biến env (token bot) *" value={form.apiKeyEnv} onChange={(e) => setForm({ ...form, apiKeyEnv: e.target.value.toUpperCase() })} placeholder="TELEGRAM_BOT_TOKEN_MAIN" />
-            <div style={sx("font-size:11.5px; color:#8B9A90; margin:-6px 0 12px")}>Nhập TÊN biến (vd TELEGRAM_BOT_TOKEN_MAIN). Token thật đặt trong .env/Render.</div>
+            {form.type === "ZALO" ? (
+              <>
+                <Field label="Số điện thoại Zalo người nhận *" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} placeholder="0905xxxxxx hoặc 84905xxxxxx (hoặc user_id Zalo nếu có)" />
+                <div style={sx("font-size:11.5px; color:#8B9A90; margin:-6px 0 12px; line-height:1.5")}>Người này cần đã <b>Quan tâm</b> OA AGO Fruit (hoặc từng nhắn OA). Token Zalo lấy tự động từ kết nối OA — không cần nhập gì thêm.</div>
+              </>
+            ) : (
+              <>
+                <Field label="Chat ID Telegram người nhận *" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} placeholder="vd 8293043273 — nhắn /start cho bot rồi lấy chat id" />
+                <div style={sx("font-size:11.5px; color:#8B9A90; margin:-6px 0 12px; line-height:1.5")}>Token bot Telegram đọc từ biến <span style={sx("font-family:monospace")}>{form.apiKeyEnv || DEFAULT_ENV.TELEGRAM}</span> trên .env/Render — mặc định là đủ, không cần nhập.</div>
+              </>
+            )}
             <Field label="Ghi chú" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Tuỳ chọn" />
             <label style={sx("display:flex; align-items:center; gap:8px; margin-bottom:14px; cursor:pointer; font-size:13.5px; color:#3C4A40")}>
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} style={sx("cursor:pointer; width:16px; height:16px")} />
