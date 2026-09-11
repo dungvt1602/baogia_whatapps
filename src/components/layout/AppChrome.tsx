@@ -84,7 +84,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
         <div
           style={sx(
-            "background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:14px; margin-top:20px; backdrop-filter:blur(4px)",
+            "background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:12px; margin-top:14px; backdrop-filter:blur(4px)",
           )}
         >
           <div style={sx("display:flex; align-items:center; gap:10px")}>
@@ -108,23 +108,26 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </div>
-          {uid && (
+          {/* 2 nút chung 1 hàng cho gọn — khối này nằm đáy sidebar, cao thêm là màn thấp bị che nút Đăng xuất */}
+          <div style={sx("display:flex; gap:6px; margin-top:12px")}>
+            {uid && (
+              <HButton
+                s={`flex:1; min-width:0; height:34px; border:1px solid ${zaloLinked ? "rgba(120,220,150,.5)" : "rgba(255,255,255,.22)"}; background:${zaloLinked ? "rgba(62,168,92,.22)" : "transparent"}; border-radius:9px; font-size:12.5px; font-weight:500; color:rgba(255,255,255,.9); cursor:pointer; transition:background .14s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 6px`}
+                h="background:rgba(255,255,255,.12); color:#fff"
+                title={zaloLinked ? "Đã kích hoạt nhận phản hồi khách về Zalo — bấm để xem / huỷ" : "Nhận phản hồi khách hàng về Zalo cá nhân"}
+                onClick={() => setZaloOpen(true)}
+              >
+                {zaloLinked ? "Ⓩ Zalo ✓" : "Ⓩ Kích hoạt Zalo"}
+              </HButton>
+            )}
             <HButton
-              s={`width:100%; margin-top:12px; height:36px; border:1px solid ${zaloLinked ? "rgba(120,220,150,.5)" : "rgba(255,255,255,.22)"}; background:${zaloLinked ? "rgba(62,168,92,.22)" : "transparent"}; border-radius:9px; font-size:13px; font-weight:500; color:rgba(255,255,255,.9); cursor:pointer; transition:background .14s`}
+              s="flex:1; min-width:0; height:34px; border:1px solid rgba(255,255,255,.22); background:transparent; border-radius:9px; font-size:12.5px; font-weight:500; color:rgba(255,255,255,.85); cursor:pointer; transition:background .14s; white-space:nowrap; padding:0 6px"
               h="background:rgba(255,255,255,.12); color:#fff"
-              title="Nhận phản hồi khách hàng về Zalo cá nhân"
-              onClick={() => setZaloOpen(true)}
+              onClick={v.logout}
             >
-              {zaloLinked ? "Ⓩ Zalo: đã kích hoạt" : "Ⓩ Kích hoạt Zalo"}
+              Đăng xuất
             </HButton>
-          )}
-          <HButton
-            s="width:100%; margin-top:8px; height:36px; border:1px solid rgba(255,255,255,.22); background:transparent; border-radius:9px; font-size:13px; font-weight:500; color:rgba(255,255,255,.85); cursor:pointer; transition:background .14s"
-            h="background:rgba(255,255,255,.12); color:#fff"
-            onClick={v.logout}
-          >
-            Đăng xuất
-          </HButton>
+          </div>
         </div>
       </div>
 

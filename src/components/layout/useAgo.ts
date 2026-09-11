@@ -170,8 +170,8 @@ export function useAgo() {
 
     // ---- shell ----
     sidebarStyle: narrow
-      ? `position:fixed; top:0; left:0; bottom:0; width:266px; z-index:50; background:linear-gradient(175deg,#17452A 0%,#0E2A19 100%); padding:22px 14px; display:flex; flex-direction:column; transform:translateX(${st.navOpen ? "0" : "-105%"}); transition:transform .26s cubic-bezier(.4,0,.2,1); box-shadow:${st.navOpen ? "0 20px 50px -20px rgba(0,0,0,.5)" : "none"}`
-      : `width:${collapsed ? "0" : "256px"}; flex-shrink:0; background:linear-gradient(175deg,#17452A 0%,#0E2A19 100%); padding:22px ${collapsed ? "0" : "14px"}; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow:hidden; transition:width .26s cubic-bezier(.4,0,.2,1), padding .26s`,
+      ? `position:fixed; top:0; left:0; bottom:0; width:266px; z-index:50; background:linear-gradient(175deg,#17452A 0%,#0E2A19 100%); padding:22px 14px; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; transform:translateX(${st.navOpen ? "0" : "-105%"}); transition:transform .26s cubic-bezier(.4,0,.2,1); box-shadow:${st.navOpen ? "0 20px 50px -20px rgba(0,0,0,.5)" : "none"}`
+      : `width:${collapsed ? "0" : "256px"}; flex-shrink:0; background:linear-gradient(175deg,#17452A 0%,#0E2A19 100%); padding:22px ${collapsed ? "0" : "14px"}; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; overflow-x:hidden; transition:width .26s cubic-bezier(.4,0,.2,1), padding .26s`,
     navOverlay: narrow && st.navOpen,
     openNav: () => patch({ navOpen: true }),
     closeNav: () => patch({ navOpen: false }),
