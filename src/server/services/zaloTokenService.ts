@@ -341,6 +341,31 @@ async function fetchOaName(accessToken: string): Promise<void> {
   }
 }
 
+// Nút "Kiểm tra kết nối" (admin): gọi Zalo thật bằng token đang có, trả tên OA. -216 -> thử làm mới 1 lần.
+export async function checkZaloConnection(): Promise<{ ok: boolean; oaName?: string; oaId?: string; error?: string }> {
+  let token = await resolveZaloAccessToken();
+  if (!token) return { ok: false, error: "Chưa có token — hãy bấm Kết nối Zalo OA." };
+  const call = async (t: string) => {
+    const res = await fetch("https://openapi.zalo.me/v2.0/oa/getoa", { headers: { access_token: t } });
+    return (await res.json().catch(() => ({}))) as { error?: number; message?: string; data?: { oa_id?: string | number; name?: string } };
+  };
+  let data = await call(token);
+  if (data?.error === -216) {
+    try {
+      token = await getRefreshedZaloAccessToken();
+      data = await call(token);
+    } catch (err) {
+      return { ok: false, error: "Token hỏng và không làm mới được: " + (err instanceof Error ? err.message : String(err)) };
+    }
+  }
+  if (data?.error === 0) {
+    const name = data.data?.name || "";
+    if (name) await setSetting(KEY_OA_NAME, name).catch(() => {});
+    return { ok: true, oaName: name, oaId: data.data?.oa_id != null ? String(data.data.oa_id) : undefined };
+  }
+  return { ok: false, error: `${data?.message || "Zalo từ chối"} (error ${data?.error ?? "?"})` };
+}
+
 // ---------- Trạng thái cho màn Zalo OA ----------
 
 export async function zaloStatus() {
