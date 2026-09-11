@@ -202,12 +202,12 @@ export async function confirmSend(params: {
 }
 
 // ---- 3) CANCEL ----
-export async function cancelSend(params: { batchId: bigint | number | string }) {
+export async function cancelSend(params: { batchId: bigint | number | string; actor?: { id?: string | null; name?: string | null } }) {
   const batch = await prisma.sendBatch.update({
     where: { id: BigInt(params.batchId) },
     data: { status: "CANCELLED", note: "Người dùng đã hủy lệnh." },
   });
-  await logActivity({ action: "HUY_LENH", target: batch.code, result: "SUCCESS" });
+  await logActivity({ userId: params.actor?.id ?? null, actorName: params.actor?.name ?? null, action: "HUY_LENH", target: batch.code, result: "SUCCESS" });
   return { batchId: batch.id, code: batch.code };
 }
 

@@ -1,6 +1,7 @@
 import { handle } from "@/server/http/json";
 import { getTemplateImage, getTemplateImageMeta, setTemplateImage, clearTemplateImage } from "@/server/services/templateService";
 import { publicImageUrl } from "@/server/lib/storage";
+import { audit, snapshot, labelOf } from "@/server/services/auditService";
 
 // GET — ảnh header của template.
 // Ảnh trên Storage -> redirect sang URL public (CDN Supabase, có cache, egress rẻ).
@@ -29,12 +30,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const ab = await req.arrayBuffer();
     if (ab.byteLength === 0) throw new Error("Ảnh rỗng.");
     if (ab.byteLength > 5 * 1024 * 1024) throw new Error("Ảnh quá lớn (tối đa 5MB).");
-    return setTemplateImage(id, ab, mime);
+    const r = await setTemplateImage(id, ab, mime);
+    const t = await snapshot("template", id);
+    await audit(req, { action: "TEMPLATE_DOI_ANH", target: labelOf("template", t, id), note: `${mime}, ${Math.round(ab.byteLength / 1024)} KB` });
+    return r;
   });
 }
 
 // DELETE — xóa ảnh header.
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return handle(() => clearTemplateImage(id));
+  return handle(async () => {
+    const r = await clearTemplateImage(id);
+    const t = await snapshot("template", id);
+    await audit(req, { action: "TEMPLATE_XOA_ANH", target: labelOf("template", t, id) });
+    return r;
+  });
 }

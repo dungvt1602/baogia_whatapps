@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/auth";
 import RegisterSW from "@/components/common/RegisterSW";
+import ActorHeaders from "@/components/common/ActorHeaders";
 
 const beVietnam = Be_Vietnam_Pro({
   variable: "--font-be-vietnam",
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="vi" className={`${beVietnam.variable} h-full antialiased`}>
       <body className="min-h-full">
         <RegisterSW />
+        <ActorHeaders />
         <AuthProvider>{children}</AuthProvider>
         <Toaster position="top-right" richColors closeButton toastOptions={{ style: { fontFamily: "var(--font-be-vietnam)" } }} />
       </body>

@@ -1,6 +1,7 @@
 import { handle } from "@/server/http/json";
 import { listTemplates, listTemplatesPaged, listPoolTemplates, createStandaloneTemplate } from "@/server/services/templateService";
 import { createTemplateSchema } from "@/server/validation/template.schema";
+import { audit, labelOf } from "@/server/services/auditService";
 
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
@@ -23,5 +24,14 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return handle(async () => createStandaloneTemplate(createTemplateSchema.parse(await req.json())));
+  return handle(async () => {
+    const input = createTemplateSchema.parse(await req.json());
+    const t = await createStandaloneTemplate(input);
+    await audit(req, {
+      action: "TEMPLATE_TAO",
+      target: labelOf("template", t as unknown as Record<string, unknown>),
+      note: input.waTemplateName ? `template Meta: ${input.waTemplateName}` : null,
+    });
+    return t;
+  });
 }

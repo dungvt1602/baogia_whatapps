@@ -301,7 +301,9 @@ export async function getRefreshedZaloAccessToken(): Promise<string> {
 }
 
 // Ép làm mới ngay (nút "Làm mới token" ở màn Zalo OA).
-export async function forceRefreshZaloToken(): Promise<ZaloTokenRow> {
+type ActorLike = { id?: string | null; name?: string | null } | null | undefined;
+
+export async function forceRefreshZaloToken(actor?: ActorLike): Promise<ZaloTokenRow> {
   if (isSharedZaloTokenConfigured()) throw new Error("Đang dùng chung token với worker Go — worker Go làm mới, web này chỉ đọc.");
   const row = await loadRow();
   if (!row) throw new Error("Chưa có token Zalo OA trong DB — hãy kết nối Zalo OA trước.");
@@ -311,7 +313,7 @@ export async function forceRefreshZaloToken(): Promise<ZaloTokenRow> {
     });
   }
   const r = await refreshing;
-  await logActivity({ action: "ZALO_LAM_MOI_TOKEN", target: r.oaId, result: "SUCCESS", note: `hết hạn ${r.expiresAt.toISOString()}` });
+  await logActivity({ userId: actor?.id ?? null, actorName: actor?.name ?? null, action: "ZALO_LAM_MOI_TOKEN", target: r.oaId, result: "SUCCESS", note: `hết hạn ${r.expiresAt.toISOString()}` });
   return r;
 }
 
@@ -423,9 +425,9 @@ export async function zaloStatus() {
 }
 
 // Ngắt kết nối: xoá token khỏi DB (admin muốn kết nối OA khác / thu hồi).
-export async function disconnectZalo(): Promise<void> {
+export async function disconnectZalo(actor?: ActorLike): Promise<void> {
   await prisma.zaloOaToken.deleteMany({});
   await Promise.all([delSetting(KEY_PKCE_VERIFIER), delSetting(KEY_PKCE_STATE), delSetting(KEY_PKCE_AT), delSetting(KEY_OA_NAME)]);
   oaIdCaptured = false;
-  await logActivity({ action: "ZALO_NGAT_KET_NOI", result: "SUCCESS" });
+  await logActivity({ userId: actor?.id ?? null, actorName: actor?.name ?? null, action: "ZALO_NGAT_KET_NOI", result: "SUCCESS" });
 }
