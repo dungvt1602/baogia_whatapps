@@ -1,5 +1,6 @@
 import { handle } from "@/server/http/json";
 import { processNextBatch } from "@/server/services/sendService";
+import { ensureZaloTokenFresh } from "@/server/services/zaloTokenService";
 
 // Xử lý hàng đợi gửi theo KIỂU KÉO (pull): mỗi lần cron/pinger gọi vào -> gửi 1 loạt lệnh.
 // Vì chạy trong REQUEST (event loop chắc chắn hoạt động), không phụ thuộc setInterval nền
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 async function run() {
+  // Tiện thể kiểm hạn token Zalo OA (tự giới hạn 1 lần đọc DB / 5 phút — pinger gọi mỗi phút không tốn).
+  void ensureZaloTokenFresh();
   const startedAt = Date.now();
   const BUDGET_MS = 40_000;
   const results: { code: string; sent: number; failed: number; status: string }[] = [];

@@ -1,13 +1,33 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
+import { useEffect, useState } from "react";
 import { useAgoCtx } from "@/components/layout/AgoContext";
+import { useAuth } from "@/lib/auth";
 import { sx, HButton, HDiv } from "@/components/common/ui";
 import { Modals } from "@/features/mock/Modals";
+import ZaloActivateModal from "@/features/zalo/ZaloActivateModal";
 
 // Khung app: sidebar + topbar dùng chung; nội dung màn = {children} (route segment).
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const v = useAgoCtx();
+  const { session } = useAuth();
+  // Kích hoạt Zalo cho CHÍNH MÌNH (nút dưới tên người dùng) — trạng thái đọc 1 lần khi mở app.
+  const [zaloOpen, setZaloOpen] = useState(false);
+  const [zaloLinked, setZaloLinked] = useState<boolean | null>(null);
+  const uid = session?.id ? String(session.id) : "";
+  useEffect(() => {
+    if (!uid) return;
+    (async () => {
+      try {
+        const r = await fetch(`/api/users/${uid}/zalo`);
+        const d = (await r.json().catch(() => ({}))) as { linked?: boolean };
+        if (r.ok) setZaloLinked(!!d.linked);
+      } catch {
+        // không chặn app
+      }
+    })();
+  }, [uid]);
   return (
     <div
       style={sx(
@@ -88,8 +108,18 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </div>
+          {uid && (
+            <HButton
+              s={`width:100%; margin-top:12px; height:36px; border:1px solid ${zaloLinked ? "rgba(120,220,150,.5)" : "rgba(255,255,255,.22)"}; background:${zaloLinked ? "rgba(62,168,92,.22)" : "transparent"}; border-radius:9px; font-size:13px; font-weight:500; color:rgba(255,255,255,.9); cursor:pointer; transition:background .14s`}
+              h="background:rgba(255,255,255,.12); color:#fff"
+              title="Nhận phản hồi khách hàng về Zalo cá nhân"
+              onClick={() => setZaloOpen(true)}
+            >
+              {zaloLinked ? "Ⓩ Zalo: đã kích hoạt" : "Ⓩ Kích hoạt Zalo"}
+            </HButton>
+          )}
           <HButton
-            s="width:100%; margin-top:12px; height:36px; border:1px solid rgba(255,255,255,.22); background:transparent; border-radius:9px; font-size:13px; font-weight:500; color:rgba(255,255,255,.85); cursor:pointer; transition:background .14s"
+            s="width:100%; margin-top:8px; height:36px; border:1px solid rgba(255,255,255,.22); background:transparent; border-radius:9px; font-size:13px; font-weight:500; color:rgba(255,255,255,.85); cursor:pointer; transition:background .14s"
             h="background:rgba(255,255,255,.12); color:#fff"
             onClick={v.logout}
           >
@@ -162,6 +192,19 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       </div>
 
       <Modals v={v} />
+      {zaloOpen && uid && (
+        <ZaloActivateModal
+          userId={uid}
+          userName={v.userName}
+          onClose={() => setZaloOpen(false)}
+          onChanged={() => {
+            void fetch(`/api/users/${uid}/zalo`)
+              .then((r) => r.json())
+              .then((d: { linked?: boolean }) => setZaloLinked(!!d.linked))
+              .catch(() => {});
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ export const PATHS: Record<string, string> = {
   team: "/nguoi-dung",
   channels: "/kenh-gui",
   receiveChannels: "/kenh-nhan",
+  zalo: "/zalo-oa", // kết nối Zalo OA (token OAuth tự làm mới, webhook)
   logs: "/nhat-ky",
   sendjobs: "/log-gui",
   inbox: "/phan-hoi",

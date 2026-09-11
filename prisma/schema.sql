@@ -382,3 +382,60 @@ DO $$ BEGIN
   ALTER TABLE "inbound_messages" ADD CONSTRAINT "inbound_messages_receive_channel_id_fkey"
     FOREIGN KEY ("receive_channel_id") REFERENCES "receive_channels"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+
+-- ============================================================
+-- ZALO OA — bảng token OAuth v4 (zalo_oa_tokens) + app_settings
+-- Chạy 1 lần trên Supabase SQL Editor (nếu không dùng được `prisma db push`).
+-- Idempotent: chạy lại nhiều lần không lỗi.
+-- ============================================================
+
+-- Cài đặt hệ thống key-value (waba_id, zalo_oa_id, zalo_pkce...) — có thể đã tồn tại.
+CREATE TABLE IF NOT EXISTS "app_settings" (
+    "key" VARCHAR(100) NOT NULL,
+    "value" TEXT NOT NULL,
+    "updated_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "app_settings_pkey" PRIMARY KEY ("key")
+);
+
+-- Token Zalo OA: 1 dòng / OA. Worker tự làm mới, KHÔNG đặt tay.
+CREATE TABLE IF NOT EXISTS "zalo_oa_tokens" (
+    "oa_id" VARCHAR(50) NOT NULL,
+    "access_token" TEXT NOT NULL,
+    "refresh_token" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(6) NOT NULL,
+    "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "zalo_oa_tokens_pkey" PRIMARY KEY ("oa_id")
+);
+
+-- ============================================================
+-- KÍCH HOẠT ZALO cho người dùng: zalo_user_bindings + zalo_link_requests
+-- Idempotent — chạy trên Supabase SQL Editor nếu không dùng được `prisma db push`.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "zalo_user_bindings" (
+    "user_id" BIGINT NOT NULL,
+    "zalo_user_id" VARCHAR(50) NOT NULL,
+    "zalo_name" VARCHAR(255),
+    "status" VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    "linked_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "zalo_user_bindings_pkey" PRIMARY KEY ("user_id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "zalo_user_bindings_zalo_user_id_key" ON "zalo_user_bindings"("zalo_user_id");
+DO $$ BEGIN
+  ALTER TABLE "zalo_user_bindings" ADD CONSTRAINT "zalo_user_bindings_user_id_fkey"
+    FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS "zalo_link_requests" (
+    "user_id" BIGINT NOT NULL,
+    "code" VARCHAR(10) NOT NULL,
+    "expires_at" TIMESTAMP(6) NOT NULL,
+    "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "zalo_link_requests_pkey" PRIMARY KEY ("user_id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "zalo_link_requests_code_key" ON "zalo_link_requests"("code");
+DO $$ BEGIN
+  ALTER TABLE "zalo_link_requests" ADD CONSTRAINT "zalo_link_requests_user_id_fkey"
+    FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

@@ -196,7 +196,7 @@ export default function ReceiveChannelsScreen() {
                 </label>
               </div>
             </div>
-            <Field label="Chat ID / User ID người nhận *" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} placeholder="Telegram chat id / Zalo user id của sếp" />
+            <Field label="Chat ID / User ID / SĐT Zalo người nhận *" value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })} placeholder="Telegram chat id / Zalo user_id hoặc SĐT Zalo (84…)" />
             <Field label="Tên biến env (token bot) *" value={form.apiKeyEnv} onChange={(e) => setForm({ ...form, apiKeyEnv: e.target.value.toUpperCase() })} placeholder="TELEGRAM_BOT_TOKEN_MAIN" />
             <div style={sx("font-size:11.5px; color:#8B9A90; margin:-6px 0 12px")}>Nhập TÊN biến (vd TELEGRAM_BOT_TOKEN_MAIN). Token thật đặt trong .env/Render.</div>
             <Field label="Ghi chú" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Tuỳ chọn" />

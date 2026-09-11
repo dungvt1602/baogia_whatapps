@@ -50,4 +50,13 @@ export async function register() {
   };
   setInterval(runCleanup, 10 * 60 * 1000); // mỗi 10 phút
   console.log("[logCleanup] chạy mỗi 10 phút (xóa >3 ngày)");
+
+  // Làm mới token Zalo OA (≈ job zalo-token-refresher của worker Go): mỗi 5 PHÚT kiểm expires_at
+  // trong DB, còn < 10 phút thì đổi refresh_token lấy cặp mới. Chưa kết nối Zalo -> không làm gì.
+  // Ngoài ra token còn được làm mới "lười" ngay lúc gửi tin + qua /api/cron/zalo-token (kiểu kéo),
+  // nên kể cả server ngủ dài ngày (Render free) vẫn tự hồi khi thức dậy.
+  const { ensureZaloTokenFresh } = await import("@/server/services/zaloTokenService");
+  void ensureZaloTokenFresh(true);
+  setInterval(() => void ensureZaloTokenFresh(true), 5 * 60 * 1000);
+  console.log("[zaloToken] job làm mới token Zalo OA chạy mỗi 5 phút");
 }

@@ -5,7 +5,8 @@ import type { CreateUserInput, UpdateUserInput } from "@/server/validation/user.
 
 export function listUsers() {
   return prisma.user.findMany({
-    include: { userRoles: { include: { role: true } } },
+    // zaloBinding: cột "Zalo" ở màn Người dùng (đã kích hoạt nhận phản hồi khách về Zalo chưa)
+    include: { userRoles: { include: { role: true } }, zaloBinding: { select: { zaloUserId: true, zaloName: true, linkedAt: true, status: true } } },
     orderBy: { createdAt: "desc" },
   });
 }

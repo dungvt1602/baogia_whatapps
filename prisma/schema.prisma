@@ -68,6 +68,9 @@ model User {
   userQuotations UserQuotation[]
   // Người thực hiện thay đổi trong audit_logs (changed_by)
   auditLogsChanged AuditLog[] @relation("AuditLogChangedBy")
+  // Kích hoạt Zalo: nhận phản hồi khách về Zalo cá nhân (mã 6 số nhắn vào OA)
+  zaloBinding     ZaloUserBinding?
+  zaloLinkRequest ZaloLinkRequest?
 
   @@map("users")
 }
@@ -442,4 +445,55 @@ model InboundMessage {
   @@index([customerId])
   @@index([receiveChannelId])
   @@map("inbound_messages")
+}
+
+// ============================================================
+// ZALO OA — TOKEN OAUTH v4 (tự làm mới)
+// ============================================================
+
+// Cặp token của Zalo OA. KHÁC nguyên tắc "DB không lưu key thật" của bảng channels vì
+// token Zalo XOAY VÒNG tự động (access_token sống ~1-25h, refresh_token ~3 tháng, và mỗi lần
+// làm mới Zalo cấp refresh_token MỚI, vô hiệu cái cũ) -> không thể đặt cố định trong .env.
+// Lần đầu lấy qua luồng cấp quyền PKCE ở màn "Zalo OA" (hoặc bootstrap từ ZALO_OA_REFRESH_TOKEN);
+// từ đó job nền + lazy refresh tự đổi refresh_token lấy cặp mới, không cần đặt tay nữa.
+model ZaloOaToken {
+  oaId         String   @id @map("oa_id") @db.VarChar(50)
+  accessToken  String   @map("access_token") @db.Text
+  refreshToken String   @map("refresh_token") @db.Text
+  expiresAt    DateTime @map("expires_at") @db.Timestamp(6) // lúc access_token hết hạn (theo expires_in Zalo trả)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@map("zalo_oa_tokens")
+}
+
+// ============================================================
+// KÍCH HOẠT ZALO CHO NGƯỜI DÙNG (mirror zalo_user_bindings / zalo_link_requests của worker Go)
+// Bấm "Kích hoạt Zalo" -> app cấp mã 6 số (sống 10 phút) -> người dùng nhắn mã vào OA
+// -> webhook bắt được -> gắn user_id Zalo với tài khoản + tự tạo kênh nhận ZALO
+// -> từ đó mọi phản hồi khách (WhatsApp/Zalo) được báo về Zalo người đó.
+// ============================================================
+
+model ZaloUserBinding {
+  userId     BigInt   @id @map("user_id")
+  zaloUserId String   @unique @map("zalo_user_id") @db.VarChar(50) // user_id theo OA (KHÔNG phải SĐT)
+  zaloName   String?  @map("zalo_name") @db.VarChar(255) // tên hiển thị Zalo lúc kích hoạt
+  status     String   @default("ACTIVE") @db.VarChar(20)
+  linkedAt   DateTime @default(now()) @map("linked_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("zalo_user_bindings")
+}
+
+// Mã kích hoạt: 1 mã / user, dùng 1 lần, hết hạn sau 10 phút (xoá ngay khi dùng).
+model ZaloLinkRequest {
+  userId    BigInt   @id @map("user_id")
+  code      String   @unique @db.VarChar(10)
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("zalo_link_requests")
 }

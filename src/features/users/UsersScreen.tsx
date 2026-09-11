@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
 import { toast } from "sonner";
+import ZaloActivateModal from "@/features/zalo/ZaloActivateModal";
 
 type Role = { role: { name: string; code: string } };
 type User = {
@@ -14,6 +15,7 @@ type User = {
   isActive: boolean;
   createdAt: string;
   userRoles: Role[];
+  zaloBinding?: { zaloUserId: string; zaloName: string | null; linkedAt: string; status: string } | null; // đã kích hoạt nhận phản hồi về Zalo
 };
 type Form = { id?: string; username: string; email: string; fullName: string; password: string; isActive: boolean };
 type SortKey = "username" | "fullName" | "email";
@@ -47,6 +49,7 @@ export default function UsersScreen() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Form | null>(null);
   const [detail, setDetail] = useState<User | null>(null);
+  const [zaloFor, setZaloFor] = useState<User | null>(null); // modal Kích hoạt Zalo cho user này
   const [pending, setPending] = useState<{ text: string; run: () => Promise<void> } | null>(null);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
@@ -142,13 +145,14 @@ export default function UsersScreen() {
                 <th key={c.key} onClick={() => onSort(c.key)} style={sx(gth + "; cursor:pointer")} title="Bấm để sắp xếp">{c.label}<span style={sx("color:#1F7440")}>{arrow(c.key)}</span></th>
               ))}
               <th style={sx(gth)}>Vai trò</th>
+              <th style={sx(gth + "; text-align:center")}>Zalo</th>
               <th style={sx(gth + "; text-align:center")}>Trạng thái</th>
               <th style={sx(gth + "; width:110px; text-align:center")}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <SkeletonRows cols={8} cellStyle={gtd} />}
-            {!loading && view.length === 0 && <tr><td colSpan={8} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có người dùng nào.</td></tr>}
+            {loading && <SkeletonRows cols={9} cellStyle={gtd} />}
+            {!loading && view.length === 0 && <tr><td colSpan={9} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có người dùng nào.</td></tr>}
             {paged.map((u, i) => {
               const on = selected.has(u.id);
               return (
@@ -159,6 +163,15 @@ export default function UsersScreen() {
                   <td style={sx(gtd + "; min-width:150px")}>{u.fullName || "—"}</td>
                   <td style={sx(gtd + "; min-width:170px")} title={u.email}>{u.email}</td>
                   <td style={sx(gtd)}>{roleNames(u)}</td>
+                  <td style={sx(gtd + "; text-align:center")}>
+                    <HButton
+                      s={`border:1px solid ${u.zaloBinding ? "#CFE8D6" : "#DCE3DC"}; border-radius:6px; background:${u.zaloBinding ? "#E7F5EC" : "#fff"}; color:${u.zaloBinding ? "#1F7440" : "#33475B"}; font-size:12px; font-weight:600; cursor:pointer; padding:0 9px; height:28px`}
+                      title={u.zaloBinding ? `Đã kích hoạt: ${u.zaloBinding.zaloName || u.zaloBinding.zaloUserId}` : "Kích hoạt nhận phản hồi khách về Zalo"}
+                      onClick={() => setZaloFor(u)}
+                    >
+                      {u.zaloBinding ? `Ⓩ ${u.zaloBinding.zaloName || "Đã kích hoạt"}` : "Ⓩ Kích hoạt"}
+                    </HButton>
+                  </td>
                   <td style={sx(gtd + "; text-align:center")}><Badge ok={u.isActive} yes="Hoạt động" no="Khóa" /></td>
                   <td style={sx(gtd + "; text-align:center")}>
                     <div style={sx("display:flex; gap:6px; justify-content:center")}>
@@ -243,6 +256,10 @@ export default function UsersScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {zaloFor && (
+        <ZaloActivateModal userId={zaloFor.id} userName={zaloFor.fullName || zaloFor.username} onClose={() => setZaloFor(null)} onChanged={() => void load()} />
       )}
     </div>
   );

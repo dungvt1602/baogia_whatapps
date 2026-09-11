@@ -6,6 +6,7 @@ import { sendTelegramText, sendTelegramTo } from "@/server/lib/telegram";
 // Thông báo nội bộ khi có sự kiện (hiện: phản hồi khách mới -> báo sếp).
 // ĐÍCH BÁO SẾP lấy từ bảng receive_channels (đang bật): mỗi dòng = 1 người nhận
 // (type TELEGRAM/ZALO, accountId = chat id/user id, apiKeyEnv = TÊN biến env chứa token).
+// Riêng ZALO: token lấy từ DB (zalo_oa_tokens, tự làm mới — màn "Zalo OA"); apiKeyEnv chỉ là fallback token tĩnh.
 // Chưa có dòng nào -> fallback về biến env cũ để không gãy.
 
 type InboundLike = {
@@ -101,15 +102,20 @@ export async function notifyInboundReply(msg: InboundLike): Promise<void> {
 
   await Promise.allSettled(
     channels.map(async (c) => {
-      const token = process.env[c.apiKeyEnv];
-      if (!token) {
-        console.warn(`[notify] kênh "${c.name}": thiếu biến env ${c.apiKeyEnv} — bỏ qua.`);
-        return;
-      }
+      const type = c.type.toUpperCase();
       try {
-        const type = c.type.toUpperCase();
+        if (type === "ZALO") {
+          // Token Zalo OA tự lấy từ DB (đã kết nối ở màn Zalo OA); apiKeyEnv chỉ dùng khi DB chưa có.
+          const r = await sendZaloTo(c.accountId, text, c.apiKeyEnv);
+          if (r.skipped) console.warn(`[notify] kênh "${c.name}": chưa kết nối Zalo OA và thiếu ${c.apiKeyEnv} — bỏ qua.`);
+          return;
+        }
+        const token = process.env[c.apiKeyEnv];
+        if (!token) {
+          console.warn(`[notify] kênh "${c.name}": thiếu biến env ${c.apiKeyEnv} — bỏ qua.`);
+          return;
+        }
         if (type === "TELEGRAM") await sendTelegramTo(token, c.accountId, text);
-        else if (type === "ZALO") await sendZaloTo(token, c.accountId, text);
       } catch (err) {
         console.error(`[notify] kênh "${c.name}" lỗi:`, err);
       }

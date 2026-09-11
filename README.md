@@ -164,6 +164,19 @@ const token = getChannelApiKey(channel); // đọc từ process.env, KHÔNG từ
 > Helper có `import "server-only"` nên tuyệt đối không bị lộ ra phía client.
 > API `GET /api/channels` cũng chỉ trả `api_key_env`, **không bao giờ** trả key thật.
 
+## Zalo OA (báo sếp + nhận tin qua webhook)
+
+Token Zalo OA chỉ sống 1–25 giờ nên app **tự làm mới** bằng `refresh_token` lưu trong bảng
+`zalo_oa_tokens` — không đặt tay `ZALO_OA_TOKEN_MAIN` nữa. Kết nối lần đầu bằng màn
+**Zalo OA** (menu admin): điền `ZALO_APP_ID` + `ZALO_SECRET_KEY` vào `.env`, khai Callback URL
+trên developers.zalo.me, bấm **Kết nối Zalo OA** → admin OA bấm Đồng ý → xong.
+
+Người nhận phản hồi khách bấm **Ⓩ Kích hoạt Zalo** (sidebar) → nhận mã 6 số → nhắn mã vào OA →
+từ đó khách reply WhatsApp/Zalo là tin báo bay về Zalo người đó (giống nút Kết nối của worker Go).
+
+Webhook nhận tin: `https://<domain>/api/webhooks/zalo` (secret riêng `ZALO_WEBHOOK_SECRET`,
+luôn trả 200). Chi tiết từng bước + các bẫy đã gặp: [`docs/zalo-oa.md`](docs/zalo-oa.md).
+
 ## Chạy bằng Docker
 
 Dự án đã có sẵn [`Dockerfile`](Dockerfile) (multi-stage, dùng Next.js standalone) và
