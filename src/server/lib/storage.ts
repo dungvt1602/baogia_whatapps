@@ -41,11 +41,21 @@ export async function uploadImageToStorage(path: string, bytes: ArrayBuffer, mim
 }
 
 export async function downloadImageFromStorage(path: string): Promise<ArrayBuffer | null> {
+  // Ưu tiên service client; server nào THIẾU SUPABASE_SERVICE_ROLE_KEY (hoặc lỗi) thì
+  // fallback tải qua PUBLIC URL — bucket này public nên luôn đọc được. Trước đây thiếu
+  // key là trả null -> gửi WhatsApp không header -> Meta từ chối #132012.
   const sb = client();
-  if (!sb) return null;
-  const { data, error } = await sb.storage.from(BUCKET).download(path);
-  if (error || !data) return null;
-  return data.arrayBuffer();
+  if (sb) {
+    const { data, error } = await sb.storage.from(BUCKET).download(path);
+    if (!error && data) return data.arrayBuffer();
+  }
+  try {
+    const res = await fetch(publicImageUrl(path));
+    if (res.ok) return await res.arrayBuffer();
+  } catch {
+    // rơi xuống null
+  }
+  return null;
 }
 
 export async function deleteImageFromStorage(path: string): Promise<void> {

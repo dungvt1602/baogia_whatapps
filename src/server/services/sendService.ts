@@ -262,6 +262,21 @@ export async function processNextBatch() {
     }
   }
 
+  // Mẫu Meta BẮT BUỘC có ảnh header (waImage đồng bộ từ Meta) mà không có mediaId
+  // (chưa upload ảnh vào template, hoặc tải/upload ảnh lỗi) -> gửi kiểu gì cũng bị Meta
+  // từ chối #132012. Fail cả lệnh với lỗi RÕ RÀNG thay vì bắn từng tin chắc chắn rớt.
+  if (useWaTemplate && !dryRun && tpl.waImage && !mediaId) {
+    const reason = includeImage
+      ? `Mẫu Meta "${tpl.waTemplateName}" yêu cầu ảnh header nhưng không tải/upload được ảnh của template — kiểm tra ảnh trong template và cấu hình Storage.`
+      : `Mẫu Meta "${tpl.waTemplateName}" yêu cầu ảnh header nhưng template chưa upload ảnh — vào Template > sửa > tải ảnh lên rồi gửi lại.`;
+    await prisma.sendJob.updateMany({
+      where: { batchId: batch.id, OR: [{ status: "QUEUED" }, { status: "FAILED", retryCount: { lt: MAX_RETRY } }] },
+      data: { status: "FAILED", error: reason, retryCount: MAX_RETRY },
+    });
+    await prisma.sendBatch.update({ where: { id: batch.id }, data: { status: "PARTIAL_FAILED", note: reason } });
+    return { processed: true as const, code: batch.code, sent: 0, failed: 1, finalStatus: "PARTIAL_FAILED" };
+  }
+
   const jobs = await prisma.sendJob.findMany({
     where: {
       batchId: batch.id,
