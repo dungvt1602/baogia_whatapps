@@ -128,11 +128,19 @@ export async function resolveZaloUserId(idOrPhone: string, apiKeyEnv?: string | 
       uidCache.set(phone, { uid: r.out, at: Date.now() });
       return r.out;
     }
+    const code = r?.resp?.error;
     console.warn("[zalo] không tra được user_id từ SĐT", phone, ":", JSON.stringify(r?.resp || {}));
+    // -232 "User hasn't interacted yet": người này chưa Quan tâm / chưa nhắn OA -> nói thẳng, đừng gửi bằng SĐT thô (sẽ ra -201 khó hiểu).
+    if (code === -232 || code === -201) {
+      throw new Error(`SĐT ${raw} chưa Quan tâm OA nên Zalo không cho nhắn. Nhờ người này mở Zalo → tìm OA AGO Fruit → bấm Quan tâm (hoặc nhắn 1 tin cho OA) rồi thử lại.`);
+    }
+    throw new Error(`Không tra được user_id Zalo cho SĐT ${raw}: ${r?.resp?.message || "lỗi " + code}`);
   } catch (err) {
+    if (err instanceof Error && err.message.startsWith("SĐT ")) throw err;
+    if (err instanceof Error && err.message.startsWith("Không tra được")) throw err;
     console.error("[zalo] tra user_id từ SĐT lỗi:", err);
+    throw new Error(`Không tra được user_id Zalo cho SĐT ${raw} (lỗi mạng). Thử lại sau.`);
   }
-  return raw; // để nguyên -> Zalo báo -201, log sẽ chỉ rõ
 }
 
 // Gửi tới 1 người nhận (user_id hoặc SĐT Zalo). `apiKeyEnv` = tên biến env token tĩnh (fallback khi DB chưa có token).
@@ -144,7 +152,14 @@ export async function sendZaloTo(recipient: string, text: string, apiKeyEnv?: st
     if (!r) return { ok: false, skipped: true }; // chưa có token nào
     if (!r.out) {
       console.error("[zalo] gửi thất bại tới", userId, ":", JSON.stringify(r.resp));
-      return { ok: false, error: r.resp?.message ? `${r.resp.message} (error ${r.resp.error})` : "gửi lỗi" };
+      const code = r.resp?.error;
+      const hint =
+        code === -201 || code === -232
+          ? " — user_id không tồn tại hoặc người này chưa Quan tâm / chưa nhắn OA AGO Fruit."
+          : code === -213 || code === -214
+            ? " — app chưa được duyệt quyền \"Gửi tin nhắn text\" hoặc người nhận chưa tương tác OA."
+            : "";
+      return { ok: false, error: (r.resp?.message ? `${r.resp.message} (error ${code})` : "gửi lỗi") + hint };
     }
     return { ok: true };
   } catch (err) {
