@@ -242,6 +242,15 @@ export function listPoolTemplates() {
 
 // Gắn HÀNG LOẠT khách vào template (trùng thì bỏ qua) — dùng khi chọn mẫu reply
 // trong wizard gửi: toàn bộ khách của đợt gửi được gắn vào mẫu reply đã chọn.
+// Gỡ hàng loạt khách khỏi template (1 câu lệnh). Khách vẫn còn trong kho / template khác.
+export async function unlinkCustomersFromTemplate(templateId: string, customerIds: (string | number)[]) {
+  if (!customerIds.length) return { unlinked: 0 };
+  const r = await prisma.templateCustomer.deleteMany({
+    where: { templateId: BigInt(templateId), customerId: { in: customerIds.map((cid) => BigInt(cid)) } },
+  });
+  return { unlinked: r.count };
+}
+
 export async function linkCustomersToTemplate(templateId: string, customerIds: (string | number)[]) {
   if (!customerIds.length) return { linked: 0 };
   const r = await prisma.templateCustomer.createMany({

@@ -76,6 +76,32 @@ export async function listCustomersPaged(opts: ListCustomersPagedOptions = {}) {
   return { items: items.map(shapeCustomer), total, page, limit };
 }
 
+// CHỌN TẤT CẢ: chỉ trả id của mọi khách khớp bộ lọc (không phân trang) — nhẹ, để FE tick hết dù có 45 trang.
+// Kèm templateId -> trả thêm id nào đang thuộc template đó (để đếm "thêm" / "gỡ" đúng khi chọn xuyên trang).
+export async function listCustomerIds(opts: ListCustomersOptions & { templateId?: string | null }) {
+  const where = buildCustomerWhere(opts);
+  const rows = await prisma.customer.findMany({ where, select: { id: true }, orderBy: { name: "asc" } });
+  const ids = rows.map((r) => String(r.id));
+  let inTemplateIds: string[] = [];
+  if (opts.templateId && ids.length) {
+    const links = await prisma.templateCustomer.findMany({
+      where: { templateId: BigInt(opts.templateId), customerId: { in: rows.map((r) => r.id) } },
+      select: { customerId: true },
+    });
+    inTemplateIds = links.map((l) => String(l.customerId));
+  }
+  return { ids, total: ids.length, inTemplateIds };
+}
+
+// Xoá hàng loạt (nút "Xoá đã chọn" khi chọn tất cả) — 1 câu lệnh thay vì N request. Trả số dòng đã xoá + vài tên đầu.
+export async function deleteCustomersBulk(ids: (string | number)[]) {
+  const bigIds = ids.map((i) => BigInt(i));
+  if (!bigIds.length) return { deleted: 0, sample: [] as string[] };
+  const sample = await prisma.customer.findMany({ where: { id: { in: bigIds } }, select: { name: true }, take: 5, orderBy: { name: "asc" } });
+  const r = await prisma.customer.deleteMany({ where: { id: { in: bigIds } } }); // cascade xoá link template
+  return { deleted: r.count, sample: sample.map((s) => s.name) };
+}
+
 // Danh sách quốc gia (market) khác nhau — dùng cho dropdown lọc.
 export async function listCustomerMarkets(): Promise<string[]> {
   const rows = await prisma.customer.findMany({

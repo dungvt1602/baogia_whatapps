@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, postJSON, sendJSON } from "@/components/common/api";
+import { getJSON, postJSON } from "@/components/common/api";
 import { toast } from "sonner";
 import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
 import { applyDial, findCountry } from "@/components/common/countries";
@@ -40,6 +40,9 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
   const [markets, setMarkets] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Chọn xuyên trang: id nào đang thuộc template này (từ các trang đã tải + từ API idsOnly) để đếm Thêm/Gỡ đúng.
+  const [inThisMap, setInThisMap] = useState<Map<string, boolean>>(new Map());
+  const [selectingAll, setSelectingAll] = useState(false);
   const [newC, setNewC] = useState<{ name: string; company: string; whatsappPhone: string; market: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -49,9 +52,16 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
       const p = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
       if (search.trim()) p.set("search", search.trim());
       if (market) p.set("market", market);
-      setData(await getJSON<Paged>(`/api/customers/search?${p.toString()}`));
+      const d = await getJSON<Paged>(`/api/customers/search?${p.toString()}`);
+      setData(d);
+      // Ghi nhớ trạng thái thuộc-template của các dòng vừa tải (phục vụ đếm khi chọn xuyên trang).
+      setInThisMap((m) => {
+        const n = new Map(m);
+        for (const r of d.items) n.set(r.id, r.templates.some((t) => t.id === templateId));
+        return n;
+      });
     } catch (e) { setErr((e as Error).message); }
-  }, [page, search, market]);
+  }, [page, search, market, templateId]);
 
   // Nạp danh sách (debounce cho gõ tìm kiếm).
   useEffect(() => {
@@ -74,21 +84,33 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
   const inThis = (r: CustRow) => r.templates.some((t) => t.id === templateId);
 
+  // Ô tick đầu bảng = trang hiện tại. CHỌN TẤT CẢ (mọi trang khớp bộ lọc) qua thanh gợi ý bên dưới — gọi API idsOnly.
   const allChecked = items.length > 0 && items.every((r) => selected.has(r.id));
+  const allTotalChecked = total > 0 && selected.size >= total;
   function toggleAll() { const s = new Set(selected); if (allChecked) items.forEach((r) => s.delete(r.id)); else items.forEach((r) => s.add(r.id)); setSelected(s); }
   function toggleOne(id: string) { const s = new Set(selected); if (s.has(id)) s.delete(id); else s.add(id); setSelected(s); }
+  async function selectAllTotal() {
+    setSelectingAll(true);
+    try {
+      const p = new URLSearchParams({ idsOnly: "1", templateId });
+      if (search.trim()) p.set("search", search.trim());
+      if (market) p.set("market", market);
+      const r = await getJSON<{ ids: string[]; total: number; inTemplateIds: string[] }>(`/api/customers/search?${p.toString()}`);
+      const inSet = new Set(r.inTemplateIds);
+      setInThisMap((m) => { const n = new Map(m); for (const id of r.ids) n.set(id, inSet.has(id)); return n; });
+      setSelected(new Set(r.ids));
+      toast.success(`Đã chọn tất cả ${r.ids.length} khách khớp bộ lọc.`);
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setSelectingAll(false); }
+  }
 
   const assign = useCallback(async (ids: string[], action: "add" | "remove") => {
     if (!ids.length) return;
     setErr(""); setBusy(true);
     try {
-      await Promise.all(
-        ids.map((id) =>
-          action === "add"
-            ? postJSON(`/api/templates/${templateId}/customers/${id}`)
-            : sendJSON("DELETE", `/api/templates/${templateId}/customers/${id}`),
-        ),
-      );
+      // 1 request cho cả lô (chọn tất cả có thể là hàng trăm khách) thay vì N request song song.
+      if (action === "add") await postJSON(`/api/templates/${templateId}/customers/link`, { customerIds: ids });
+      else await postJSON(`/api/templates/${templateId}/customers/unlink`, { customerIds: ids });
       setSelected(new Set());
       await load();
       toast.success(action === "add" ? `Đã thêm ${ids.length} khách vào template` : `Đã gỡ ${ids.length} khách khỏi template`);
@@ -96,9 +118,12 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
     finally { setBusy(false); }
   }, [load, templateId]);
 
-  const selectedRows = items.filter((r) => selected.has(r.id));
-  const selInThis = selectedRows.filter(inThis).length;   // đang trong template này
-  const selOthers = selectedRows.length - selInThis;      // chưa vào template này (kho / template khác)
+  // Đếm trên TOÀN BỘ id đã chọn (kể cả trang khác) nhờ inThisMap; id chưa rõ coi như chưa thuộc template.
+  const selIds = [...selected];
+  const selInThisIds = selIds.filter((id) => inThisMap.get(id) === true);   // đang trong template này
+  const selOtherIds = selIds.filter((id) => inThisMap.get(id) !== true);    // chưa vào template này (kho / template khác)
+  const selInThis = selInThisIds.length;
+  const selOthers = selOtherIds.length;
 
   async function createNew() {
     if (!newC?.name.trim()) { toast.error("Nhập tên khách"); return; }
@@ -136,13 +161,27 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
         <HButton s={green} onClick={() => setNewC({ name: "", company: "", whatsappPhone: "", market: market })}>+ Khách mới</HButton>
       </div>
 
+      {/* Thanh CHỌN TẤT CẢ (kiểu Gmail): tick hết trang này mà còn trang khác -> mời chọn tất cả qua API */}
+      {allChecked && total > items.length && (
+        <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:10px; background:#F4FBF6; border:1px dashed #9CCFAB; border-radius:10px; padding:8px 12px; flex-wrap:wrap; font-size:13px; color:#1F4A2C")}>
+          {allTotalChecked ? (
+            <span>Đã chọn <b>tất cả {selected.size}</b> khách khớp bộ lọc.</span>
+          ) : (
+            <>
+              <span>Đã chọn <b>{selected.size}</b> khách trên trang này.</span>
+              <HButton s={`border:none; background:none; color:#1F7440; font-weight:700; cursor:pointer; text-decoration:underline; font-size:13px; padding:0 ${selectingAll ? "opacity:.6; pointer-events:none" : ""}`} onClick={selectAllTotal}>{selectingAll ? "Đang chọn…" : `Chọn tất cả ${total} khách${search.trim() || market ? " khớp bộ lọc" : ""}`}</HButton>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Thanh thao tác hàng loạt */}
       {selected.size > 0 && (
         <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:10px; background:#EAF3EC; border:1px solid #CFE6D5; border-radius:10px; padding:8px 12px; flex-wrap:wrap")}>
           <span style={sx("font-size:13px; color:#1F7440; font-weight:600")}>Đã chọn {selected.size}</span>
           <div style={sx("flex:1")} />
-          <HButton s={`${green} ${selOthers ? "" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selectedRows.filter((r) => !inThis(r)).map((r) => r.id), "add")}>➕ Thêm {selOthers || ""} vào template</HButton>
-          <HButton s={`${ghost} ${selInThis ? "border-color:#E4C7C5; color:#B3261E" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selectedRows.filter(inThis).map((r) => r.id), "remove")}>➖ Gỡ {selInThis || ""} khỏi template</HButton>
+          <HButton s={`${green} ${selOthers ? "" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selOtherIds, "add")}>➕ Thêm {selOthers || ""} vào template</HButton>
+          <HButton s={`${ghost} ${selInThis ? "border-color:#E4C7C5; color:#B3261E" : "opacity:.5; pointer-events:none"}`} onClick={() => assign(selInThisIds, "remove")}>➖ Gỡ {selInThis || ""} khỏi template</HButton>
           <HButton s={ghost} onClick={() => setSelected(new Set())}>Bỏ chọn</HButton>
         </div>
       )}

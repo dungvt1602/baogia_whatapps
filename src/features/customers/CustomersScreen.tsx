@@ -187,8 +187,13 @@ export default function CustomersScreen() {
   const curPage = Math.min(page, totalPages);
   const paged = view.slice((curPage - 1) * 15, curPage * 15);
 
+  // Ô tick đầu bảng = trang hiện tại (15 dòng). Muốn CHỌN TẤT CẢ khách khớp bộ lọc (kể cả 45 trang) thì
+  // dùng thanh "Chọn tất cả N khách" hiện ra ngay dưới thanh công cụ (kiểu Gmail).
   const allChecked = paged.length > 0 && paged.every((c) => selected.has(c.id));
+  const allViewChecked = view.length > 0 && view.every((c) => selected.has(c.id));
   function toggleAll() { const s = new Set(selected); if (allChecked) paged.forEach((c) => s.delete(c.id)); else paged.forEach((c) => s.add(c.id)); setSelected(s); }
+  function selectAllView() { setSelected(new Set(view.map((c) => c.id))); }
+  function clearSelection() { setSelected(new Set()); }
   function toggleOne(id: string) { const s = new Set(selected); if (s.has(id)) s.delete(id); else s.add(id); setSelected(s); }
   function onSort(key: SortKey) { setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" })); }
   const arrow = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
@@ -222,7 +227,8 @@ export default function CustomersScreen() {
   function delSelected() {
     if (selected.size === 0) return;
     const ids = [...selected];
-    setPending({ text: `Xóa ${ids.length} khách hàng đã chọn?`, run: async () => { await Promise.all(ids.map((id) => sendJSON("DELETE", `/api/customers/${id}`))); setSelected(new Set()); await load(); toast.success(`Đã xóa ${ids.length} khách hàng`); } });
+    // Xoá hàng loạt bằng 1 request (chọn tất cả có thể là hàng trăm khách).
+    setPending({ text: `Xóa ${ids.length} khách hàng đã chọn?`, run: async () => { const r = await postJSON<{ deleted: number }>("/api/customers/bulk-delete", { ids }); setSelected(new Set()); await load(); toast.success(`Đã xóa ${r.deleted} khách hàng`); } });
   }
   async function runPending() {
     if (!pending) return;
@@ -309,7 +315,8 @@ export default function CustomersScreen() {
         </select>
         <div style={sx("font-size:12.5px; color:#7B8A80")}>{view.length} khách hàng{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
-        <HButton s={`${ghost} ${selected.size ? "" : "opacity:.5; pointer-events:none"}; border-color:#E4C7C5; color:#B3261E`} onClick={delSelected}>🗑 Xóa đã chọn</HButton>
+        {selected.size > 0 && <HButton s={ghost} onClick={clearSelection}>Bỏ chọn</HButton>}
+        <HButton s={`${ghost} ${selected.size ? "" : "opacity:.5; pointer-events:none"}; border-color:#E4C7C5; color:#B3261E`} onClick={delSelected}>🗑 Xóa đã chọn{selected.size ? ` (${selected.size})` : ""}</HButton>
         <HButton s={ghost} onClick={downloadTemplate}>⭳ Mẫu</HButton>
         <label style={sx(ghost + "; display:inline-flex; align-items:center; gap:4px")} title="Nhập từ file Excel/CSV">
           ⭱ Nhập Excel
@@ -319,11 +326,28 @@ export default function CustomersScreen() {
         <HButton s={green} onClick={openAdd}>+ Thêm khách hàng</HButton>
       </div>
 
+      {/* Thanh CHỌN TẤT CẢ (kiểu Gmail): tick hết trang này mà còn khách ở trang khác -> mời chọn tất cả */}
+      {allChecked && view.length > paged.length && (
+        <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:10px; background:#EAF3EC; border:1px solid #CFE6D5; border-radius:10px; padding:8px 12px; flex-wrap:wrap; font-size:13px; color:#1F4A2C")}>
+          {allViewChecked ? (
+            <>
+              <span>Đã chọn <b>tất cả {view.length}</b> khách hàng khớp bộ lọc{q.trim() || market ? " hiện tại" : ""}.</span>
+              <HButton s="border:none; background:none; color:#1F7440; font-weight:700; cursor:pointer; text-decoration:underline; font-size:13px; padding:0" onClick={clearSelection}>Bỏ chọn tất cả</HButton>
+            </>
+          ) : (
+            <>
+              <span>Đã chọn <b>{selected.size}</b> khách trên trang này.</span>
+              <HButton s="border:none; background:none; color:#1F7440; font-weight:700; cursor:pointer; text-decoration:underline; font-size:13px; padding:0" onClick={selectAllView}>Chọn tất cả {view.length} khách hàng{q.trim() || market ? " khớp bộ lọc" : ""}</HButton>
+            </>
+          )}
+        </div>
+      )}
+
       <div style={sx("background:#fff; border:1px solid #D3DCE3; border-radius:10px; overflow:auto; max-height:calc(100vh - 200px)")}>
         <table style={sx("width:100%; border-collapse:collapse; min-width:900px")}>
           <thead>
             <tr>
-              <th style={sx(gth + "; width:38px; text-align:center")}>
+              <th style={sx(gth + "; width:38px; text-align:center")} title={allViewChecked ? "Đã chọn tất cả" : "Chọn cả trang này"}>
                 <input type="checkbox" checked={allChecked} onChange={toggleAll} style={sx("cursor:pointer")} />
               </th>
               <th style={sx(gth + "; width:44px; text-align:center")}>No.</th>
