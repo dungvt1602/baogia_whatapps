@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
 // Map cột file (linh hoạt: bỏ dấu/khoảng trắng/hoa-thường) -> field khách hàng.
-const normHeader = (s: unknown) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+// "đ" phải đổi tay: NFD không tách được Đ/đ thành d + dấu -> trước đây "SĐT khác" thành "stkhac".
+const normHeader = (s: unknown) => String(s ?? "").toLowerCase().replace(/đ/g, "d").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
 const HEADER_ALIASES: Record<string, string[]> = {
   name: ["tenkhach", "ten", "name", "hoten", "khachhang", "tenkh"],
   company: ["congty", "company", "cty", "doanhnghiep"],
@@ -22,13 +23,20 @@ const HEADER_ALIASES: Record<string, string[]> = {
   note: ["ghichu", "note", "ghichep"],
 };
 type ImportRow = { name: string; company: string; whatsappPhone: string; phone: string; email: string; market: string; receiveQuotation: boolean; note: string };
+// Cột WhatsApp hay bị gõ sai chính tả ("Số WhatApp", "Whatsap", "Watsapp") -> nhận theo
+// "chứa chữ" thay vì khớp tuyệt đối, kẻo cả file mất cột bắt buộc -> 0 khách nhập được.
+const isWhatsappHeader = (h: string) => /wh?ats?app?|whatap/.test(h);
+function headerField(h: string): string | undefined {
+  for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
+    if (aliases.includes(h)) return field;
+  }
+  return isWhatsappHeader(h) ? "whatsappPhone" : undefined;
+}
 function mapImportRow(raw: Record<string, unknown>): ImportRow {
   const out: Record<string, string> = {};
   for (const [key, val] of Object.entries(raw)) {
-    const h = normHeader(key);
-    for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
-      if (aliases.includes(h)) { out[field] = String(val ?? "").trim(); break; }
-    }
+    const field = headerField(normHeader(key));
+    if (field && out[field] === undefined) out[field] = String(val ?? "").trim();
   }
   const digits = (s?: string) => (s || "").replace(/\D/g, "");
   const truthy = (s?: string) => {
@@ -59,8 +67,8 @@ function detectCustomerSheet(wb: XLSX.WorkBook): string {
   for (const name of wb.SheetNames) {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[name], { defval: "" });
     if (!rows.length) continue;
-    const headers = Object.keys(rows[0]).map(normHeader);
-    if (headers.some((h) => HEADER_ALIASES.name.includes(h)) && headers.some((h) => HEADER_ALIASES.whatsappPhone.includes(h))) return name;
+    const fields = Object.keys(rows[0]).map((k) => headerField(normHeader(k)));
+    if (fields.includes("name") && fields.includes("whatsappPhone")) return name;
   }
   return wb.SheetNames[0];
 }
@@ -273,11 +281,20 @@ export default function CustomersScreen() {
       const res = await postJSON<{ created: number; skippedDup: number; invalid: { row: number; reason: string }[] }>("/api/customers/import", { rows });
       setImportFile(null);
       await load();
+      const dupInFile = res.invalid.filter((x) => x.reason.startsWith("Trùng WhatsApp")).length;
+      const errors = res.invalid.filter((x) => !x.reason.startsWith("Trùng WhatsApp"));
       const parts = [`Đã thêm ${res.created} khách`];
-      if (res.skippedDup) parts.push(`bỏ ${res.skippedDup} trùng`);
-      if (res.invalid.length) parts.push(`${res.invalid.length} dòng lỗi`);
-      toast.success(parts.join(" · "));
-      if (res.invalid.length) console.warn("[import] dòng lỗi:", res.invalid);
+      if (res.skippedDup) parts.push(`${res.skippedDup} đã có sẵn`);
+      if (dupInFile) parts.push(`${dupInFile} dòng trùng số trong file (gộp 1)`);
+      if (errors.length) parts.push(`${errors.length} dòng lỗi`);
+      toast.success(parts.join(" · "), { duration: 10000 });
+      if (errors.length) {
+        toast.warning(
+          errors.slice(0, 3).map((x) => `Dòng ${x.row}: ${x.reason}`).join(" · ") + (errors.length > 3 ? ` … (+${errors.length - 3})` : ""),
+          { duration: 10000 },
+        );
+        console.warn("[import] dòng lỗi:", errors);
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {

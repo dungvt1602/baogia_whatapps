@@ -146,7 +146,7 @@ export async function importCustomers(rows: unknown[]): Promise<{
   const seen = new Set<string>();
 
   rows.forEach((raw, i) => {
-    const parsed = createCustomerSchema.safeParse(raw);
+    const parsed = createCustomerSchema.safeParse(cleanImportRow(raw));
     if (!parsed.success) {
       invalid.push({ row: i + 2, reason: parsed.error.issues[0]?.message || "Dữ liệu không hợp lệ" }); // +2: bỏ dòng tiêu đề
       return;
@@ -160,18 +160,25 @@ export async function importCustomers(rows: unknown[]): Promise<{
     valid.push(parsed.data);
   });
 
+  // Chia lô: file lớn (vd 16k dòng) mà 1 câu lệnh thì vượt trần 65.535 tham số của Postgres.
+  const CHUNK = 1000;
+  const waList = [...seen];
+  const existSet = new Set<string | null>();
+  for (let i = 0; i < waList.length; i += CHUNK) {
+    const existing = await prisma.customer.findMany({
+      where: { whatsappPhone: { in: waList.slice(i, i + CHUNK) } },
+      select: { whatsappPhone: true },
+    });
+    existing.forEach((e) => existSet.add(e.whatsappPhone));
+  }
   // Bỏ khách đã tồn tại trong DB (theo whatsappPhone).
-  const existing = seen.size
-    ? await prisma.customer.findMany({ where: { whatsappPhone: { in: [...seen] } }, select: { whatsappPhone: true } })
-    : [];
-  const existSet = new Set(existing.map((e) => e.whatsappPhone));
   const toCreate = valid.filter((v) => !existSet.has(v.whatsappPhone));
   const skippedDup = valid.length - toCreate.length;
 
   let created = 0;
-  if (toCreate.length) {
+  for (let i = 0; i < toCreate.length; i += CHUNK) {
     const r = await prisma.customer.createMany({
-      data: toCreate.map((v) => ({
+      data: toCreate.slice(i, i + CHUNK).map((v) => ({
         name: v.name,
         company: v.company ?? null,
         phone: v.phone ?? null,
@@ -182,10 +189,26 @@ export async function importCustomers(rows: unknown[]): Promise<{
         receiveQuotation: v.receiveQuotation ?? true,
         note: v.note ?? null,
       })),
+      skipDuplicates: true,
     });
-    created = r.count;
+    created += r.count;
   }
   return { created, skippedDup, invalid };
+}
+
+// Dọn 1 dòng nhập trước khi kiểm tra: ô PHỤ sai định dạng chỉ bỏ ô đó, không loại cả khách
+// (vd email ghi 2 địa chỉ "a@x.kr b.com" -> lấy địa chỉ hợp lệ đầu tiên, không có thì để trống).
+// Quốc gia viết HOA cho khớp dữ liệu sẵn có ("Japan" -> "JAPAN").
+const IMPORT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function cleanImportRow(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const r = { ...(raw as Record<string, unknown>) };
+  if (typeof r.email === "string" && r.email && !IMPORT_EMAIL_RE.test(r.email)) {
+    r.email = r.email.split(/[\s;,]+/).find((p) => IMPORT_EMAIL_RE.test(p)) || "";
+  }
+  if (typeof r.phone === "string" && r.phone && !/^\d{6,15}$/.test(r.phone)) r.phone = "";
+  if (typeof r.market === "string") r.market = r.market.trim().toUpperCase();
+  return r;
 }
 
 // PATCH: chỉ sửa thông tin khách (gán/gỡ template chuyển sang API link riêng).
