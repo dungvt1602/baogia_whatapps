@@ -375,6 +375,7 @@ model SendJob {
   @@index([status])
   @@index([batchId]) // worker query/count theo batch (luồng gửi nóng nhất)
   @@index([createdAt]) // listSendJobs (lọc + orderBy desc) & cleanupSendJobs (deleteMany theo createdAt)
+  @@unique([batchId, customerId]) // 1 lệnh không thể có 2 tin cho cùng 1 khách (chốt chặn gửi trùng)
   @@map("send_jobs")
 }
 

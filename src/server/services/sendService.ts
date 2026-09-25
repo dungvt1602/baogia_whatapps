@@ -161,9 +161,6 @@ export async function confirmSend(params: {
     },
   });
   if (!batch) throw new Error("Không tìm thấy lệnh gửi.");
-  if (["QUEUED", "SENDING", "SENT"].includes(batch.status)) {
-    throw new Error(`Lệnh ${batch.code} đã ở hàng đợi hoặc đã gửi.`);
-  }
   if (!batch.template.quotation) throw new Error("Template này chưa gắn báo giá nên chưa gửi được.");
 
   const recipients = eligible(batch.template.customerLinks.map((l) => l.customer));
@@ -172,17 +169,32 @@ export async function confirmSend(params: {
   const channel = batch.channel || batch.template.channel;
   const channelType = (channel?.type || "WHATSAPP").toUpperCase();
 
-  await prisma.sendJob.createMany({
-    data: recipients.map((c) => ({
-      batchId: batch.id,
-      customerId: c.id,
-      toName: c.name,
-      toPhone: c.whatsappPhone || c.phone || "",
-      channel: channelType,
-      message: renderTemplate(batch.template.body || "", batch.template.quotation!, c, batch.template.quotation!.items),
-      status: "QUEUED",
-    })),
+  // KHOÁ lệnh bằng 1 câu UPDATE có điều kiện: bấm "Xác nhận" 2 lần (hoặc mạng chậm bấm lại)
+  // thì chỉ 1 request đổi được PREVIEW -> QUEUED; request kia nhận count=0 và dừng, không tạo
+  // bộ tin thứ 2. Chỉ lệnh PREVIEW mới xác nhận được (xác nhận lại lệnh đã gửi = gửi trùng).
+  const lock = await prisma.sendBatch.updateMany({
+    where: { id: batch.id, status: "PREVIEW" },
+    data: { status: "QUEUED" },
   });
+  if (lock.count === 0) throw new Error(`Lệnh ${batch.code} đã được xác nhận hoặc không còn ở bước xem trước.`);
+
+  try {
+    await prisma.sendJob.createMany({
+      data: recipients.map((c) => ({
+        batchId: batch.id,
+        customerId: c.id,
+        toName: c.name,
+        toPhone: c.whatsappPhone || c.phone || "",
+        channel: channelType,
+        message: renderTemplate(batch.template.body || "", batch.template.quotation!, c, batch.template.quotation!.items),
+        status: "QUEUED",
+      })),
+      skipDuplicates: true, // chốt chặn cuối: unique (batch_id, customer_id)
+    });
+  } catch (err) {
+    await prisma.sendBatch.update({ where: { id: batch.id }, data: { status: "PREVIEW" } });
+    throw err;
+  }
 
   await prisma.sendBatch.update({
     where: { id: batch.id },
@@ -211,8 +223,23 @@ export async function cancelSend(params: { batchId: bigint | number | string; ac
   return { batchId: batch.id, code: batch.code };
 }
 
+// Tin bị kẹt "Đang gửi" quá lâu = tiến trình gửi chết giữa chừng (Render restart/deploy).
+// KHÔNG tự gửi lại (có thể tin đã tới khách) — đánh Thất bại kèm lý do để người dùng tự quyết.
+const STUCK_SENDING_MS = 15 * 60 * 1000;
+async function releaseStuckJobs() {
+  await prisma.sendJob.updateMany({
+    where: { status: "SENDING", updatedAt: { lt: new Date(Date.now() - STUCK_SENDING_MS) } },
+    data: {
+      status: "FAILED",
+      retryCount: MAX_RETRY,
+      error: "Kẹt ở trạng thái Đang gửi quá 15 phút (tiến trình gửi bị ngắt giữa chừng) — không rõ tin đã tới khách chưa nên KHÔNG tự gửi lại.",
+    },
+  });
+}
+
 // ---- 4) WORKER: xử lý batch tiếp theo trong hàng đợi ----
 export async function processNextBatch() {
+  await releaseStuckJobs();
   const nextJob = await prisma.sendJob.findFirst({
     where: {
       OR: [{ status: "QUEUED" }, { status: "FAILED", retryCount: { lt: MAX_RETRY } }],
@@ -290,7 +317,14 @@ export async function processNextBatch() {
 
   for (const job of jobs) {
     await delay(QUEUE_DELAY_MS);
-    await prisma.sendJob.update({ where: { id: job.id }, data: { status: "SENDING" } });
+    // GIỮ CHỖ tin trước khi gửi: danh sách `jobs` lấy 1 lần từ đầu, nếu 2 tiến trình cùng chạy lệnh
+    // này (worker nền + cron gọi vào, hoặc 2 bản Render chồng nhau lúc deploy) thì cả 2 có cùng
+    // danh sách. Chỉ tiến trình đổi được trạng thái (count=1) mới gửi; bên kia bỏ qua -> không gửi trùng.
+    const claim = await prisma.sendJob.updateMany({
+      where: { id: job.id, OR: [{ status: "QUEUED" }, { status: "FAILED", retryCount: { lt: MAX_RETRY } }] },
+      data: { status: "SENDING" },
+    });
+    if (claim.count === 0) continue;
 
     if (!job.toPhone) {
       failed++;
