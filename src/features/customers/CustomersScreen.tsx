@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
 import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
@@ -100,6 +100,7 @@ const gth = "padding:6px 8px; font-size:11px; font-weight:700; color:#33475B; ba
 const gtd = "padding:5px 8px; font-size:12px; color:#1B2A20; border:1px solid #E4EAEF; white-space:nowrap; background:inherit";
 
 const empty = (): Form => ({ name: "", company: "", whatsappPhone: "", phone: "", email: "", market: "", status: "ACTIVE", receiveQuotation: true, note: "" });
+const PAGE_SIZE = 15; // số khách mỗi trang (server trả đúng chừng này)
 
 // Hiển thị số WhatsApp: tách mã vùng dạng "(+84) 901234002".
 const fmtWa = (phone: string | null, market: string | null) => {
@@ -148,36 +149,50 @@ export default function CustomersScreen() {
 
   const [market, setMarket] = useState("");            // lọc theo quốc gia (server-side)
   const [markets, setMarkets] = useState<string[]>([]); // danh sách quốc gia cho dropdown
+  const [total, setTotal] = useState(0);                // tổng số khách khớp bộ lọc (server đếm)
+  const [debouncedQ, setDebouncedQ] = useState("");     // từ khoá đã chờ gõ xong -> mới gọi server
+  const [exporting, setExporting] = useState(false);
+  const reqId = useRef(0); // bấm chuyển trang liên tục: chỉ nhận kết quả của lần gọi MỚI NHẤT
 
+  // PHÂN TRANG SERVER: mỗi lần chỉ tải đúng 1 trang (PAGE_SIZE khách). Tìm kiếm/lọc/sắp xếp do server làm,
+  // nên dù có hàng chục nghìn khách thì mỗi lần mở màn chỉ tốn vài KB (trước đây tải cả danh sách ~2,4 MB).
   const load = useCallback(async () => {
+    const my = ++reqId.current;
     setLoading(true);
     try {
-      const qs = market ? `?market=${encodeURIComponent(market)}` : "";
-      setRows(await getJSON<Customer[]>(`/api/customers${qs}`));
-    } catch (e) { setErr((e as Error).message); }
-    finally { setLoading(false); }
-  }, [market]);
+      const p = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort: sort.key, dir: sort.dir });
+      if (market) p.set("market", market);
+      if (debouncedQ) p.set("search", debouncedQ);
+      const r = await getJSON<{ items: Customer[]; total: number }>(`/api/customers/search?${p.toString()}`);
+      if (my !== reqId.current) return;
+      // Xoá bớt khách làm trang đang xem vượt số trang còn lại -> lùi về trang cuối (sẽ tải lại).
+      const lastPage = Math.max(1, Math.ceil(r.total / PAGE_SIZE));
+      if (page > lastPage) { setPage(lastPage); return; }
+      setRows(r.items);
+      setTotal(r.total);
+    } catch (e) {
+      if (my === reqId.current) setErr((e as Error).message);
+    } finally {
+      if (my === reqId.current) setLoading(false);
+    }
+  }, [page, market, debouncedQ, sort]);
   useEffect(() => {
     (async () => { await load(); })();
   }, [load]);
 
-  // Tải danh sách quốc gia (1 lần) cho dropdown lọc.
+  // Gõ tìm kiếm: chờ ngừng gõ 300ms mới gọi server (không gọi theo từng ký tự).
   useEffect(() => {
-    (async () => {
-      try { setMarkets(await getJSON<string[]>("/api/customers/markets")); } catch { /* bỏ qua */ }
-    })();
-  }, []);
+    const id = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => clearTimeout(id);
+  }, [q]);
 
-  const view = useMemo(() => {
-    const kw = q.trim().toLowerCase();
-    const arr = rows.filter((c) => !kw || [c.name, c.whatsappPhone, c.phone, c.email, c.market].some((v) => (v || "").toLowerCase().includes(kw)));
-    arr.sort((a, b) => {
-      const va = String((a as unknown as Record<string, unknown>)[sort.key] ?? "").toLowerCase();
-      const vb = String((b as unknown as Record<string, unknown>)[sort.key] ?? "").toLowerCase();
-      return va < vb ? -1 : va > vb ? 1 : 0;
-    });
-    return sort.dir === "desc" ? arr.reverse() : arr;
-  }, [rows, q, sort]);
+  // Danh sách quốc gia cho dropdown lọc (tải lại sau khi nhập Excel vì có thể thêm nước mới).
+  const loadMarkets = useCallback(async () => {
+    try { setMarkets(await getJSON<string[]>("/api/customers/markets")); } catch { /* bỏ qua */ }
+  }, []);
+  useEffect(() => {
+    (async () => { await loadMarkets(); })();
+  }, [loadMarkets]);
 
   // Chuẩn hoá danh sách quốc gia cho dropdown lọc: gộp trùng (INDIA/India/KOREA...) + tên chuẩn.
   const marketOptions = useMemo(() => {
@@ -191,19 +206,29 @@ export default function CustomersScreen() {
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, "vi"));
   }, [markets]);
 
-  const totalPages = Math.max(1, Math.ceil(view.length / 15));
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const curPage = Math.min(page, totalPages);
-  const paged = view.slice((curPage - 1) * 15, curPage * 15);
+  const paged = rows; // server đã trả đúng 1 trang
 
   // Ô tick đầu bảng = trang hiện tại (15 dòng). Muốn CHỌN TẤT CẢ khách khớp bộ lọc (kể cả 45 trang) thì
-  // dùng thanh "Chọn tất cả N khách" hiện ra ngay dưới thanh công cụ (kiểu Gmail).
+  // dùng thanh "Chọn tất cả N khách" hiện ra ngay dưới thanh công cụ (kiểu Gmail) — lấy id từ server.
+  // Đổi bộ lọc/tìm kiếm là bỏ chọn, nên "đã chọn đủ total" = đã chọn tất cả khách khớp bộ lọc.
   const allChecked = paged.length > 0 && paged.every((c) => selected.has(c.id));
-  const allViewChecked = view.length > 0 && view.every((c) => selected.has(c.id));
+  const allViewChecked = total > 0 && selected.size === total;
+  const filtered = !!(debouncedQ || market);
   function toggleAll() { const s = new Set(selected); if (allChecked) paged.forEach((c) => s.delete(c.id)); else paged.forEach((c) => s.add(c.id)); setSelected(s); }
-  function selectAllView() { setSelected(new Set(view.map((c) => c.id))); }
+  async function selectAllView() {
+    try {
+      const p = new URLSearchParams({ idsOnly: "1" });
+      if (market) p.set("market", market);
+      if (debouncedQ) p.set("search", debouncedQ);
+      const r = await getJSON<{ ids: string[] }>(`/api/customers/search?${p.toString()}`);
+      setSelected(new Set(r.ids));
+    } catch (e) { toast.error((e as Error).message); }
+  }
   function clearSelection() { setSelected(new Set()); }
   function toggleOne(id: string) { const s = new Set(selected); if (s.has(id)) s.delete(id); else s.add(id); setSelected(s); }
-  function onSort(key: SortKey) { setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" })); }
+  function onSort(key: SortKey) { setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" })); setPage(1); }
   const arrow = (key: SortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
 
   function openEdit(c: Customer) {
@@ -280,7 +305,7 @@ export default function CustomersScreen() {
     try {
       const res = await postJSON<{ created: number; skippedDup: number; invalid: { row: number; reason: string }[] }>("/api/customers/import", { rows });
       setImportFile(null);
-      await load();
+      await Promise.all([load(), loadMarkets()]);
       const dupInFile = res.invalid.filter((x) => x.reason.startsWith("Trùng WhatsApp")).length;
       const errors = res.invalid.filter((x) => !x.reason.startsWith("Trùng WhatsApp"));
       const parts = [`Đã thêm ${res.created} khách`];
@@ -302,14 +327,27 @@ export default function CustomersScreen() {
     }
   }
 
-  function exportCsv() {
-    const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const head = ["TEN_KHACH", "CONG_TY", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "GHI_CHU", "TEMPLATE"];
-    const data = view.map((c) => [c.name, c.company || "", c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.note || "", c.templates.map((t) => t.name).join("; ") || "Kho"]);
-    const csv = [head, ...data].map((r) => r.map(cell).join(",")).join("\r\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
-    a.download = "khach-hang.csv"; a.click(); URL.revokeObjectURL(a.href);
+  // Xuất: chỉ lúc bấm mới tải TOÀN BỘ khách khớp bộ lọc hiện tại (không phải mỗi lần mở màn).
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const p = new URLSearchParams({ sort: sort.key, dir: sort.dir });
+      if (market) p.set("market", market);
+      if (debouncedQ) p.set("search", debouncedQ);
+      const all = await getJSON<Customer[]>(`/api/customers?${p.toString()}`);
+      const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+      const head = ["TEN_KHACH", "CONG_TY", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "GHI_CHU", "TEMPLATE"];
+      const data = all.map((c) => [c.name, c.company || "", c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.note || "", c.templates.map((t) => t.name).join("; ") || "Kho"]);
+      const csv = [head, ...data].map((r) => r.map(cell).join(",")).join("\r\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+      a.download = "khach-hang.csv"; a.click(); URL.revokeObjectURL(a.href);
+      toast.success(`Đã xuất ${all.length} khách hàng`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
   }
 
   const cols: { key: SortKey; label: string }[] = [
@@ -324,13 +362,13 @@ export default function CustomersScreen() {
       <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap")}>
         <div style={sx("position:relative; width:260px")}>
           <span style={sx("position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; color:#9AA7A0")}>🔍</span>
-          <HInput s={`${inp} height:34px; padding-left:32px`} focus={focus} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Tìm tên, SĐT, email..." />
+          <HInput s={`${inp} height:34px; padding-left:32px`} focus={focus} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); clearSelection(); }} placeholder="Tìm tên, công ty, SĐT, email..." />
         </div>
-        <select value={market} onChange={(e) => { setMarket(e.target.value); setPage(1); }} style={sx(`${inp} height:34px; width:190px; padding:0 8px`)} title="Lọc theo quốc gia">
+        <select value={market} onChange={(e) => { setMarket(e.target.value); setPage(1); clearSelection(); }} style={sx(`${inp} height:34px; width:190px; padding:0 8px`)} title="Lọc theo quốc gia">
           <option value="">🌏 Tất cả quốc gia</option>
           {marketOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <div style={sx("font-size:12.5px; color:#7B8A80")}>{view.length} khách hàng{selected.size ? ` · chọn ${selected.size}` : ""}</div>
+        <div style={sx("font-size:12.5px; color:#7B8A80")}>{total} khách hàng{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
         {selected.size > 0 && <HButton s={ghost} onClick={clearSelection}>Bỏ chọn</HButton>}
         <HButton s={`${ghost} ${selected.size ? "" : "opacity:.5; pointer-events:none"}; border-color:#E4C7C5; color:#B3261E`} onClick={delSelected}>🗑 Xóa đã chọn{selected.size ? ` (${selected.size})` : ""}</HButton>
@@ -339,29 +377,29 @@ export default function CustomersScreen() {
           ⭱ Nhập Excel
           <input type="file" accept=".xlsx,.xls,.csv" onChange={onImportFile} style={sx("display:none")} />
         </label>
-        <HButton s={ghost} onClick={exportCsv}>⭳ Excel</HButton>
+        <HButton s={`${ghost} ${exporting ? "opacity:.5; pointer-events:none" : ""}`} onClick={exportCsv}>{exporting ? "Đang xuất..." : "⭳ Excel"}</HButton>
         <HButton s={green} onClick={openAdd}>+ Thêm khách hàng</HButton>
       </div>
 
       {/* Thanh CHỌN TẤT CẢ (kiểu Gmail): tick hết trang này mà còn khách ở trang khác -> mời chọn tất cả */}
-      {allChecked && view.length > paged.length && (
+      {allChecked && total > paged.length && (
         <div style={sx("display:flex; align-items:center; gap:10px; margin-bottom:10px; background:#EAF3EC; border:1px solid #CFE6D5; border-radius:10px; padding:8px 12px; flex-wrap:wrap; font-size:13px; color:#1F4A2C")}>
           {allViewChecked ? (
             <>
-              <span>Đã chọn <b>tất cả {view.length}</b> khách hàng khớp bộ lọc{q.trim() || market ? " hiện tại" : ""}.</span>
+              <span>Đã chọn <b>tất cả {total}</b> khách hàng khớp bộ lọc{filtered ? " hiện tại" : ""}.</span>
               <HButton s="border:none; background:none; color:#1F7440; font-weight:700; cursor:pointer; text-decoration:underline; font-size:13px; padding:0" onClick={clearSelection}>Bỏ chọn tất cả</HButton>
             </>
           ) : (
             <>
-              <span>Đã chọn <b>{selected.size}</b> khách trên trang này.</span>
-              <HButton s="border:none; background:none; color:#1F7440; font-weight:700; cursor:pointer; text-decoration:underline; font-size:13px; padding:0" onClick={selectAllView}>Chọn tất cả {view.length} khách hàng{q.trim() || market ? " khớp bộ lọc" : ""}</HButton>
+              <span>Đã chọn <b>{selected.size}</b> khách.</span>
+              <HButton s="border:none; background:none; color:#1F7440; font-weight:700; cursor:pointer; text-decoration:underline; font-size:13px; padding:0" onClick={selectAllView}>Chọn tất cả {total} khách hàng{filtered ? " khớp bộ lọc" : ""}</HButton>
             </>
           )}
         </div>
       )}
 
       <div style={sx("background:#fff; border:1px solid #D3DCE3; border-radius:10px; overflow:auto; max-height:calc(100vh - 200px)")}>
-        <table style={sx("width:100%; border-collapse:collapse; min-width:900px")}>
+        <table style={sx(`width:100%; border-collapse:collapse; min-width:900px; transition:opacity .15s; opacity:${loading && rows.length ? ".55" : "1"}`)}>
           <thead>
             <tr>
               <th style={sx(gth + "; width:38px; text-align:center")} title={allViewChecked ? "Đã chọn tất cả" : "Chọn cả trang này"}>
@@ -379,8 +417,8 @@ export default function CustomersScreen() {
             </tr>
           </thead>
           <tbody>
-            {loading && <SkeletonRows cols={11} cellStyle={gtd} />}
-            {!loading && view.length === 0 && (
+            {loading && rows.length === 0 && <SkeletonRows cols={11} cellStyle={gtd} />}
+            {!loading && total === 0 && (
               <tr><td colSpan={11} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có khách hàng nào.</td></tr>
             )}
             {paged.map((c, i) => {
@@ -388,7 +426,7 @@ export default function CustomersScreen() {
               return (
                 <tr key={c.id} style={sx(`background:${on ? "#EAF3EC" : i % 2 ? "#FBFDFB" : "#fff"}`)}>
                   <td style={sx(gtd + "; text-align:center")}><input type="checkbox" checked={on} onChange={() => toggleOne(c.id)} style={sx("cursor:pointer")} /></td>
-                  <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(curPage - 1) * 15 + i + 1}</td>
+                  <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(curPage - 1) * PAGE_SIZE + i + 1}</td>
                   <td style={sx(gtd + "; font-weight:600; max-width:170px; overflow:hidden; text-overflow:ellipsis; color:#1F7440; cursor:pointer; text-decoration:underline")} onClick={() => setDetail(c)} title={c.name}>{c.name}</td>
                   <td style={sx(gtd + "; max-width:160px; overflow:hidden; text-overflow:ellipsis")} title={c.company || ""}>{c.company || "—"}</td>
                   <td style={sx(gtd + "; font-variant-numeric:tabular-nums")} title={c.whatsappPhone || ""}>{fmtWa(c.whatsappPhone, c.market)}</td>
@@ -415,7 +453,7 @@ export default function CustomersScreen() {
         </table>
       </div>
       <div style={sx("display:flex; align-items:center; gap:8px; margin-top:10px")}>
-        <div style={sx("font-size:12.5px; color:#7B8A80; flex:1")}>Trang {curPage}/{totalPages} · {view.length} khách hàng</div>
+        <div style={sx("font-size:12.5px; color:#7B8A80; flex:1")}>Trang {curPage}/{totalPages} · {total} khách hàng</div>
         <div style={sx("display:flex; align-items:center; gap:5px; font-size:12.5px; color:#7B8A80")}>
           <span>Đến trang</span>
           <input

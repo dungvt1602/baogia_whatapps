@@ -22,6 +22,8 @@ export async function GET(request: Request) {
       listCustomersPaged({
         market: p.get("market"),
         search: p.get("search"),
+        sort: p.get("sort"),
+        dir: p.get("dir"),
         page: Number(p.get("page")) || 1,
         limit: Number(p.get("limit")) || 20,
       }),

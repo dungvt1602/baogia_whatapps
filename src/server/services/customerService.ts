@@ -6,8 +6,21 @@ import { createCustomerSchema, type CreateCustomerInput, type PatchCustomerInput
 export type ListCustomersOptions = {
   excludeTemplate?: string | null; // trả ứng viên CHƯA thuộc template này
   market?: string | null; // lọc theo quốc gia (thị trường)
-  search?: string | null; // tìm theo tên / SĐT / email
+  search?: string | null; // tìm theo tên / công ty / SĐT / email / quốc gia
+  sort?: string | null; // cột sắp xếp (chỉ nhận các cột trong SORTABLE)
+  dir?: string | null; // asc | desc
 };
+
+// Sắp xếp phía server (màn Khách hàng phân trang server). Cột có thể trống -> đẩy ô trống xuống cuối.
+// Thêm id làm khoá phụ để thứ tự ổn định giữa các trang (không lặp/sót khách khi chuyển trang).
+const SORTABLE = ["name", "company", "whatsappPhone", "phone", "email", "market", "status"] as const;
+const NULLABLE_SORT = new Set(["company", "whatsappPhone", "phone", "email", "market"]);
+function buildCustomerOrder(opts: ListCustomersOptions): Prisma.CustomerOrderByWithRelationInput[] {
+  const key = (SORTABLE as readonly string[]).includes(opts.sort || "") ? (opts.sort as string) : "name";
+  const dir: Prisma.SortOrder = opts.dir === "desc" ? "desc" : "asc";
+  const primary = NULLABLE_SORT.has(key) ? { [key]: { sort: dir, nulls: "last" } } : { [key]: dir };
+  return [primary as Prisma.CustomerOrderByWithRelationInput, { id: "asc" }];
+}
 
 // Dựng điều kiện WHERE dùng chung cho list thường & list phân trang.
 function buildCustomerWhere(opts: ListCustomersOptions): Prisma.CustomerWhereInput {
@@ -26,9 +39,11 @@ function buildCustomerWhere(opts: ListCustomersOptions): Prisma.CustomerWhereInp
     and.push({
       OR: [
         { name: { contains: kw, mode: "insensitive" } },
+        { company: { contains: kw, mode: "insensitive" } },
         { phone: { contains: kw, mode: "insensitive" } },
         { whatsappPhone: { contains: kw, mode: "insensitive" } },
         { email: { contains: kw, mode: "insensitive" } },
+        { market: { contains: kw, mode: "insensitive" } },
       ],
     });
   }
@@ -50,7 +65,7 @@ function shapeCustomer(c: CustomerWithLinks) {
 export async function listCustomers(opts: ListCustomersOptions = {}) {
   const rows = await prisma.customer.findMany({
     where: buildCustomerWhere(opts),
-    orderBy: { name: "asc" },
+    orderBy: buildCustomerOrder(opts),
     include: customerInclude,
   });
   return rows.map(shapeCustomer);
@@ -66,7 +81,7 @@ export async function listCustomersPaged(opts: ListCustomersPagedOptions = {}) {
   const [items, total] = await Promise.all([
     prisma.customer.findMany({
       where,
-      orderBy: { name: "asc" },
+      orderBy: buildCustomerOrder(opts),
       include: customerInclude,
       skip: (page - 1) * limit,
       take: limit,

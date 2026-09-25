@@ -11,6 +11,8 @@ export async function GET(request: Request) {
         excludeTemplate: p.get("excludeTemplate"),
         market: p.get("market"),
         search: p.get("search"),
+        sort: p.get("sort"),
+        dir: p.get("dir"),
       }),
     500,
   );
