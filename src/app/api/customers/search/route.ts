@@ -12,6 +12,8 @@ export async function GET(request: Request) {
         listCustomerIds({
           market: p.get("market"),
           search: p.get("search"),
+          phoneType: p.get("phoneType"),
+          hasWhatsapp: p.get("hasWhatsapp") === "1",
           templateId: p.get("templateId"),
         }),
       500,
@@ -22,6 +24,8 @@ export async function GET(request: Request) {
       listCustomersPaged({
         market: p.get("market"),
         search: p.get("search"),
+        phoneType: p.get("phoneType"),
+        hasWhatsapp: p.get("hasWhatsapp") === "1",
         sort: p.get("sort"),
         dir: p.get("dir"),
         page: Number(p.get("page")) || 1,

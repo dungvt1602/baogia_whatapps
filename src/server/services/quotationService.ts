@@ -84,6 +84,18 @@ export function getQuotationDetail(id: string) {
 // Xóa báo giá: dọn lệnh gửi/jobs, gỡ template về kho, xóa items + gán user, rồi xóa báo giá.
 export async function deleteQuotation(id: string) {
   const qid = BigInt(id);
+
+  // CHẶN xoá khi còn tin CHƯA gửi — cùng lý do với deleteTemplate: xoá báo giá kéo theo cả
+  // send_batches lẫn send_jobs, hàng đợi đang chạy dở sẽ bốc hơi im lặng.
+  const pending = await prisma.sendJob.count({
+    where: { batch: { quotationId: qid }, status: { in: ["QUEUED", "SENDING", "HOLD"] } },
+  });
+  if (pending > 0) {
+    throw new Error(
+      `Báo giá này còn ${pending} tin chưa gửi trong hàng đợi. Vào màn Gửi báo giá huỷ lệnh đang chạy trước, rồi mới xoá báo giá.`,
+    );
+  }
+
   const batches = await prisma.sendBatch.findMany({ where: { quotationId: qid }, select: { id: true } });
   const batchIds = batches.map((b) => b.id);
   await prisma.$transaction([

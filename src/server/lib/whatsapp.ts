@@ -1,7 +1,9 @@
 import "server-only";
+import { isDryRun, dryRunMessageId } from "@/server/lib/sendMode";
 
 // Gửi 1 tin nhắn báo giá qua kênh. Trả { messageId } hoặc ném lỗi.
-// - SEND_DRY_RUN != "false" (mặc định) -> giả lập thành công (để test luồng).
+// - Chế độ gửi giả (mặc định) -> giả lập thành công, không gọi Meta. Quy tắc đọc SEND_DRY_RUN
+//   nằm ở src/server/lib/sendMode.ts: phải ghi rõ false/0/no/off mới gửi thật.
 // - WhatsApp: gửi bằng TEMPLATE đã duyệt (kèm ảnh header) nếu có, ngược lại gửi text.
 
 export type WaTemplate = {
@@ -26,14 +28,14 @@ export type SendInput = {
   wa?: WaTemplate | null;
 };
 
-function isDryRun(): boolean {
-  return process.env.SEND_DRY_RUN !== "false";
-}
-function dryId(): string {
-  return "DRYRUN-" + crypto.randomUUID();
-}
+// Chế độ gửi nằm ở src/server/lib/sendMode.ts (file thuần, test được ngoài Next). Re-export để
+// mọi nơi — sendService, instrumentation, giao diện — dùng CHUNG một nguồn sự thật.
+export { isDryRun };
+const dryId = dryRunMessageId;
 function apiVersion(): string {
-  return process.env.WHATSAPP_API_VERSION || "v20.0";
+  // v22.0 là bản dùng chung cho cả gửi tin lẫn tra template/phone number (metaSyncService).
+  // Trước đây nơi gửi tin mặc định v20.0 còn metaSyncService mặc định v22.0 — đã thống nhất lại.
+  return process.env.WHATSAPP_API_VERSION || "v22.0";
 }
 
 // fetch CÓ TIMEOUT: quá `ms` không phản hồi thì HỦY (throw) — chống 1 cuộc gọi mạng
@@ -46,6 +48,27 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, ms = 200
   } finally {
     clearTimeout(timer);
   }
+}
+
+// GET Graph API dùng chung (gửi tin + tra template + tra số điện thoại). Có timeout,
+// token/version tham số hoá (mặc định WHATSAPP_TOKEN_MAIN + apiVersion()). Ném lỗi có cấu trúc.
+export async function graphGet(
+  path: string,
+  opts: { token?: string; version?: string; timeoutMs?: number } = {},
+): Promise<Record<string, unknown>> {
+  const token = opts.token || process.env.WHATSAPP_TOKEN_MAIN;
+  if (!token) throw new Error("Thiếu WHATSAPP_TOKEN_MAIN.");
+  const version = opts.version || apiVersion();
+  const res = await fetchWithTimeout(
+    `https://graph.facebook.com/${version}${path}`,
+    { headers: { authorization: `Bearer ${token}` } },
+    opts.timeoutMs,
+  );
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new Error(`Graph API lỗi ${res.status}: ` + JSON.stringify((data as { error?: unknown })?.error || data).slice(0, 300));
+  }
+  return data;
 }
 
 // Upload ảnh lên WhatsApp -> trả media id (giống bot.uploadImageMedia).

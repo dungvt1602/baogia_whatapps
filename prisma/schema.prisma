@@ -275,6 +275,10 @@ model Customer {
   status           String   @default("ACTIVE") @db.VarChar(20) // ACTIVE | INACTIVE
   receiveQuotation Boolean  @default(true) @map("receive_quotation") // có nhận báo giá không
   note             String?  @db.Text // ghi chú (import từ GHI_CHU của sheet bot)
+  // Loại số (suy từ dãy số bằng libphonenumber-js): MOBILE | FIXED_LINE | AMBIGUOUS | UNKNOWN.
+  // Trạng thái WhatsApp (suy từ kết quả gửi thật, tín hiệu YẾU): null | NO_WHATSAPP.
+  phoneType        String?  @map("phone_type") @db.VarChar(20)
+  waStatus         String?  @map("wa_status") @db.VarChar(20)
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
   // N-N: customer <-> template (qua bảng nối template_customers)
@@ -288,6 +292,7 @@ model Customer {
   // Index hỗ trợ màn Khách hàng (tìm kiếm + lọc + phân trang):
   @@index([market]) // lọc theo quốc gia + dropdown distinct market
   @@index([name]) // orderBy name asc khi phân trang
+  @@index([phoneType]) // bộ lọc Loại số
   @@map("customers")
 }
 
@@ -360,7 +365,7 @@ model SendJob {
   toPhone    String?   @map("to_phone") @db.VarChar(30)
   channel    String    @db.VarChar(20) // WHATSAPP | ZALO | TELEGRAM
   message    String?   @db.Text // nội dung đã render sẵn cho khách này
-  // QUEUED -> SENDING -> SENT | FAILED
+  // QUEUED -> SENDING -> SENT -> DELIVERED -> READ | FAILED | HOLD (chờ hạn mức)
   status     String    @default("QUEUED") @db.VarChar(20)
   messageId  String?   @map("message_id") @db.VarChar(255)
   error      String?   @db.Text
@@ -375,6 +380,8 @@ model SendJob {
   @@index([status])
   @@index([batchId]) // worker query/count theo batch (luồng gửi nóng nhất)
   @@index([createdAt]) // listSendJobs (lọc + orderBy desc) & cleanupSendJobs (deleteMany theo createdAt)
+  @@index([messageId]) // webhook cập nhật trạng thái giao (updateDeliveryStatus) theo messageId — trước đây quét cả bảng
+  @@index([status, sentAt]) // đếm hạn mức 24h (countUsed24h): lọc status IN + range sentAt
   @@unique([batchId, customerId]) // 1 lệnh không thể có 2 tin cho cùng 1 khách (chốt chặn gửi trùng)
   @@map("send_jobs")
 }

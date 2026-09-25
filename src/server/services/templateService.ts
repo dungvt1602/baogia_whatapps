@@ -302,6 +302,20 @@ export async function updateTemplate(id: string, input: UpdateTemplateInput) {
 // Link N-N (template_customers) tự bị xoá theo (onDelete: Cascade) — khách hàng giữ nguyên.
 export async function deleteTemplate(id: string) {
   const tid = BigInt(id);
+
+  // CHẶN xoá khi còn tin CHƯA gửi. Xoá send_batches sẽ cascade xoá luôn send_jobs, nên trước đây
+  // xoá 1 template đang chạy dở là bốc hơi cả hàng đợi mà không báo gì — lệnh 8.000 khách mới gửi
+  // được 2.000 thì 6.000 tin còn lại biến mất không dấu vết. Muốn xoá thì phải Huỷ lệnh trước,
+  // lúc đó job chuyển FAILED kèm lý do và người dùng biết mình vừa bỏ những tin nào.
+  const pending = await prisma.sendJob.count({
+    where: { batch: { templateId: tid }, status: { in: ["QUEUED", "SENDING", "HOLD"] } },
+  });
+  if (pending > 0) {
+    throw new Error(
+      `Template này còn ${pending} tin chưa gửi trong hàng đợi. Vào màn Gửi báo giá huỷ lệnh đang chạy trước, rồi mới xoá template.`,
+    );
+  }
+
   await prisma.$transaction([
     prisma.quotationTemplateSend.deleteMany({ where: { templateId: tid } }),
     prisma.sendBatch.deleteMany({ where: { templateId: tid } }),

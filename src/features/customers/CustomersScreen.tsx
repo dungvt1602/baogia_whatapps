@@ -5,6 +5,7 @@ import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
 import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
 import { applyDial, findCountry, splitPhone } from "@/components/common/countries";
+import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS, WA_STATUS_META } from "@/components/common/phoneTypeMeta";
 import { createCustomerSchema } from "@/server/validation/customer.schema";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -84,10 +85,12 @@ type Customer = {
   status: string;
   receiveQuotation: boolean;
   note: string | null;
+  phoneType: string | null;
+  waStatus: string | null;
   templates: { id: string; name: string }[];
 };
 type Form = { id?: string; name: string; company: string; whatsappPhone: string; phone: string; email: string; market: string; status: string; receiveQuotation: boolean; note: string };
-type SortKey = "name" | "company" | "whatsappPhone" | "phone" | "email" | "market" | "status";
+type SortKey = "name" | "company" | "whatsappPhone" | "phone" | "email" | "market" | "status" | "phoneType";
 
 const inp = "height:40px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:9px; padding:0 11px; font-size:13.5px; color:#14261A; outline:none; width:100%;";
 const focus = "border-color:#3EA85C; box-shadow:0 0 0 3px rgba(62,168,92,.14)";
@@ -149,6 +152,7 @@ export default function CustomersScreen() {
 
   const [market, setMarket] = useState("");            // lọc theo quốc gia (server-side)
   const [markets, setMarkets] = useState<string[]>([]); // danh sách quốc gia cho dropdown
+  const [phoneType, setPhoneType] = useState("");       // lọc theo loại số (server-side)
   const [total, setTotal] = useState(0);                // tổng số khách khớp bộ lọc (server đếm)
   const [debouncedQ, setDebouncedQ] = useState("");     // từ khoá đã chờ gõ xong -> mới gọi server
   const [exporting, setExporting] = useState(false);
@@ -162,6 +166,7 @@ export default function CustomersScreen() {
     try {
       const p = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort: sort.key, dir: sort.dir });
       if (market) p.set("market", market);
+      if (phoneType) p.set("phoneType", phoneType);
       if (debouncedQ) p.set("search", debouncedQ);
       const r = await getJSON<{ items: Customer[]; total: number }>(`/api/customers/search?${p.toString()}`);
       if (my !== reqId.current) return;
@@ -175,7 +180,7 @@ export default function CustomersScreen() {
     } finally {
       if (my === reqId.current) setLoading(false);
     }
-  }, [page, market, debouncedQ, sort]);
+  }, [page, market, phoneType, debouncedQ, sort]);
   useEffect(() => {
     (async () => { await load(); })();
   }, [load]);
@@ -215,12 +220,13 @@ export default function CustomersScreen() {
   // Đổi bộ lọc/tìm kiếm là bỏ chọn, nên "đã chọn đủ total" = đã chọn tất cả khách khớp bộ lọc.
   const allChecked = paged.length > 0 && paged.every((c) => selected.has(c.id));
   const allViewChecked = total > 0 && selected.size === total;
-  const filtered = !!(debouncedQ || market);
+  const filtered = !!(debouncedQ || market || phoneType);
   function toggleAll() { const s = new Set(selected); if (allChecked) paged.forEach((c) => s.delete(c.id)); else paged.forEach((c) => s.add(c.id)); setSelected(s); }
   async function selectAllView() {
     try {
       const p = new URLSearchParams({ idsOnly: "1" });
       if (market) p.set("market", market);
+      if (phoneType) p.set("phoneType", phoneType);
       if (debouncedQ) p.set("search", debouncedQ);
       const r = await getJSON<{ ids: string[] }>(`/api/customers/search?${p.toString()}`);
       setSelected(new Set(r.ids));
@@ -255,13 +261,13 @@ export default function CustomersScreen() {
     } catch (e) { toast.error((e as Error).message); }
   }
   function del(c: Customer) {
-    setPending({ text: `Xóa khách hàng "${c.name}"?`, run: async () => { await sendJSON("DELETE", `/api/customers/${c.id}`); await load(); toast.success("Đã xóa khách hàng"); } });
+    setPending({ text: `Xóa khách hàng "${c.name}"?`, run: async () => { const r = await sendJSON<{ cancelledJobs?: number }>("DELETE", `/api/customers/${c.id}`); await load(); toast.success(r?.cancelledJobs ? `Đã xóa khách hàng · huỷ ${r.cancelledJobs} tin chưa gửi` : "Đã xóa khách hàng"); } });
   }
   function delSelected() {
     if (selected.size === 0) return;
     const ids = [...selected];
     // Xoá hàng loạt bằng 1 request (chọn tất cả có thể là hàng trăm khách).
-    setPending({ text: `Xóa ${ids.length} khách hàng đã chọn?`, run: async () => { const r = await postJSON<{ deleted: number }>("/api/customers/bulk-delete", { ids }); setSelected(new Set()); await load(); toast.success(`Đã xóa ${r.deleted} khách hàng`); } });
+    setPending({ text: `Xóa ${ids.length} khách hàng đã chọn?`, run: async () => { const r = await postJSON<{ deleted: number; cancelledJobs?: number }>("/api/customers/bulk-delete", { ids }); setSelected(new Set()); await load(); toast.success(r.cancelledJobs ? `Đã xóa ${r.deleted} khách hàng · huỷ ${r.cancelledJobs} tin chưa gửi` : `Đã xóa ${r.deleted} khách hàng`); } });
   }
   async function runPending() {
     if (!pending) return;
@@ -333,11 +339,12 @@ export default function CustomersScreen() {
     try {
       const p = new URLSearchParams({ sort: sort.key, dir: sort.dir });
       if (market) p.set("market", market);
+      if (phoneType) p.set("phoneType", phoneType);
       if (debouncedQ) p.set("search", debouncedQ);
       const all = await getJSON<Customer[]>(`/api/customers?${p.toString()}`);
       const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-      const head = ["TEN_KHACH", "CONG_TY", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "GHI_CHU", "TEMPLATE"];
-      const data = all.map((c) => [c.name, c.company || "", c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, c.note || "", c.templates.map((t) => t.name).join("; ") || "Kho"]);
+      const head = ["TEN_KHACH", "CONG_TY", "WHATSAPP", "SDT", "EMAIL", "THI_TRUONG", "NHAN_BAO_GIA", "TRANG_THAI", "LOAI_SO", "TRANG_THAI_WHATSAPP", "GHI_CHU", "TEMPLATE"];
+      const data = all.map((c) => [c.name, c.company || "", c.whatsappPhone || "", c.phone || "", c.email || "", c.market || "", c.receiveQuotation ? "Có" : "Không", c.status, PHONE_TYPE_META[c.phoneType || ""]?.label || "", c.waStatus === "NO_WHATSAPP" ? "Không có WhatsApp" : "", c.note || "", c.templates.map((t) => t.name).join("; ") || "Kho"]);
       const csv = [head, ...data].map((r) => r.map(cell).join(",")).join("\r\n");
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
@@ -352,7 +359,7 @@ export default function CustomersScreen() {
 
   const cols: { key: SortKey; label: string }[] = [
     { key: "name", label: "Tên khách" }, { key: "company", label: "Công ty" }, { key: "whatsappPhone", label: "WhatsApp" }, { key: "phone", label: "SĐT" },
-    { key: "email", label: "Email" }, { key: "market", label: "Thị trường" }, { key: "status", label: "Trạng thái" },
+    { key: "email", label: "Email" }, { key: "market", label: "Thị trường" }, { key: "status", label: "Trạng thái" }, { key: "phoneType", label: "Loại số" },
   ];
 
   return (
@@ -367,6 +374,10 @@ export default function CustomersScreen() {
         <select value={market} onChange={(e) => { setMarket(e.target.value); setPage(1); clearSelection(); }} style={sx(`${inp} height:34px; width:190px; padding:0 8px`)} title="Lọc theo quốc gia">
           <option value="">🌏 Tất cả quốc gia</option>
           {marketOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select value={phoneType} onChange={(e) => { setPhoneType(e.target.value); setPage(1); clearSelection(); }} style={sx(`${inp} height:34px; width:150px; padding:0 8px`)} title="Lọc theo loại số">
+          <option value="">📱 Tất cả loại số</option>
+          {PHONE_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{PHONE_TYPE_META[t].label}</option>)}
         </select>
         <div style={sx("font-size:12.5px; color:#7B8A80")}>{total} khách hàng{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
@@ -417,9 +428,9 @@ export default function CustomersScreen() {
             </tr>
           </thead>
           <tbody>
-            {loading && rows.length === 0 && <SkeletonRows cols={11} cellStyle={gtd} />}
+            {loading && rows.length === 0 && <SkeletonRows cols={13} cellStyle={gtd} />}
             {!loading && total === 0 && (
-              <tr><td colSpan={11} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có khách hàng nào.</td></tr>
+              <tr><td colSpan={13} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có khách hàng nào.</td></tr>
             )}
             {paged.map((c, i) => {
               const on = selected.has(c.id);
@@ -435,6 +446,19 @@ export default function CustomersScreen() {
                   <td style={sx(gtd)}><MarketCell market={c.market} /></td>
                   <td style={sx(gtd + "; text-align:center")}>
                     <span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:${c.status === "ACTIVE" ? "#E7F5EC" : "#FDECEC"}; color:${c.status === "ACTIVE" ? "#1F7440" : "#B3261E"}`)}>{c.status}</span>
+                  </td>
+                  <td style={sx(gtd + "; text-align:center")}>
+                    {(() => {
+                      const pt = PHONE_TYPE_META[c.phoneType || ""];
+                      const ws = WA_STATUS_META[c.waStatus || ""];
+                      if (!pt && !ws) return <span style={sx("color:#9AA7A0")}>—</span>;
+                      return (
+                        <span style={sx("display:inline-flex; flex-direction:column; gap:3px")}>
+                          {pt && <span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:${pt.bg}; color:${pt.fg}`)}>{pt.label}</span>}
+                          {ws && <span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:${ws.bg}; color:${ws.fg}`)}>{ws.label}</span>}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td style={sx(gtd + "; text-align:center")}>
                     <span style={sx(`font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; background:${c.receiveQuotation ? "#E7F5EC" : "#F1F4F1"}; color:${c.receiveQuotation ? "#1F7440" : "#8B9A90"}`)}>{c.receiveQuotation ? "Có" : "Không"}</span>
@@ -608,6 +632,8 @@ export default function CustomersScreen() {
         const rows: [string, React.ReactNode][] = [
           ["Tên khách", detail.name], ["Công ty", detail.company || "—"], ["Số WhatsApp", detail.whatsappPhone || "—"], ["SĐT khác", detail.phone || "—"],
           ["Email", detail.email || "—"], ["Thị trường", detail.market || "—"], ["Trạng thái", detail.status],
+          ["Loại số", PHONE_TYPE_META[detail.phoneType || ""]?.label || "—"],
+          ["WhatsApp", detail.waStatus === "NO_WHATSAPP" ? "Không có WhatsApp" : "—"],
           ["Nhận báo giá", detail.receiveQuotation ? "Có" : "Không"], ["Ghi chú", detail.note || "—"], ["Template", detail.templates.map((t) => t.name).join(", ") || "Kho"],
         ];
         return (

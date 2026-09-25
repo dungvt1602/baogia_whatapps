@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/server/db/prisma";
 import { renderBodyParams } from "@/server/lib/placeholders";
 import { sendQuotationMessage, uploadWhatsAppMedia } from "@/server/lib/whatsapp";
+import { isDryRun } from "@/server/lib/sendMode";
 import { getTemplateImage } from "@/server/services/templateService";
 import { logActivity } from "@/server/services/activityService";
 
@@ -74,7 +75,7 @@ export async function maybeAutoReply(msg: InboundLike): Promise<void> {
     // 4) Ảnh header (nếu mẫu có): dùng media id cache, hết hạn mới tải + upload lại.
     const token = process.env[tpl.channel?.apiKeyEnv || "WHATSAPP_TOKEN_MAIN"];
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || tpl.channel?.accountId || "";
-    const dryRun = process.env.SEND_DRY_RUN !== "false";
+    const dryRun = isDryRun(); // dùng chung với lớp gửi tin — xem src/server/lib/sendMode.ts
     let mediaId: string | undefined;
     const imgMeta = await prisma.templateImage.findUnique({
       where: { templateId: tpl.id },
