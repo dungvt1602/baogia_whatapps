@@ -38,6 +38,7 @@ function StatusBadge({ s }: { s: string }) {
     SENT: { label: "Đã gửi", bg: "#E7F5EC", fg: "#1F7440" },
     DELIVERED: { label: "✓✓ Tới máy", bg: "#DCF0E2", fg: "#166534" },
     READ: { label: "👁 Đã đọc", bg: "#DBEAFE", fg: "#1D4ED8" },
+    HOLD: { label: "⏳ Chờ hạn mức", bg: "#EEF2FF", fg: "#4F46E5" },
     FAILED: { label: "Thất bại", bg: "#FDECEC", fg: "#B3261E" },
   };
   const v = M[u] || { label: u || "—", bg: "#F1F4F1", fg: "#8B9A90" };
@@ -52,7 +53,7 @@ export default function SendJobsScreen() {
   const [detail, setDetail] = useState<Job | null>(null);
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
-  const [fStatus, setFStatus] = useState("all"); // all | SENT | FAILED
+  const [fStatus, setFStatus] = useState("all"); // all | OK | READ | FAILED | HOLD
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "createdAt", dir: "desc" });
 
@@ -90,6 +91,7 @@ export default function SendJobsScreen() {
   const sentCount = rows.filter((j) => ["SENT", "DELIVERED", "READ"].includes((j.status || "").toUpperCase())).length;
   const readCount = rows.filter((j) => (j.status || "").toUpperCase() === "READ").length;
   const failCount = rows.filter((j) => (j.status || "").toUpperCase() === "FAILED").length;
+  const holdCount = rows.filter((j) => (j.status || "").toUpperCase() === "HOLD").length;
 
   function exportCsv() {
     const cell = (v: unknown) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -127,6 +129,7 @@ export default function SendJobsScreen() {
         {filterBtn("all", "Tất cả")}
         {filterBtn("OK", `Gửi thành công (${sentCount})`)}
         {filterBtn("READ", `👁 Đã đọc (${readCount})`)}
+        {filterBtn("HOLD", `⏳ Chờ hạn mức (${holdCount})`)}
         {filterBtn("FAILED", `Thất bại (${failCount})`)}
         <div style={sx("flex:1")} />
         <HButton s={ghost} onClick={load}>↻ Tải lại</HButton>
@@ -173,7 +176,7 @@ export default function SendJobsScreen() {
         <HButton s={`${ghost} ${curPage <= 1 ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage - 1)}>‹ Trước</HButton>
         <HButton s={`${ghost} ${curPage >= totalPages ? "opacity:.45; pointer-events:none" : ""}`} onClick={() => setPage(curPage + 1)}>Sau ›</HButton>
       </div>
-      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Chỉ hiển thị <b>3 ngày gần nhất</b>. Mỗi ngày lúc ~2h sáng hệ thống tự dọn <b>toàn bộ</b> log gửi quá 3 ngày (cả thành công lẫn thất bại). Bấm tiêu đề cột để sắp xếp.</div>
+      <div style={sx("font-size:11.5px; color:#8B9A90; margin-top:8px")}>Chỉ hiển thị <b>3 ngày gần nhất</b>. Hệ thống tự dọn log gửi <b>đã kết thúc</b> quá 3 ngày (giữ lại tin đang chờ/chờ hạn mức để không mất tin). Bấm tiêu đề cột để sắp xếp.</div>
 
       {detail && (
         <div style={sx("position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px")}>
@@ -190,7 +193,7 @@ export default function SendJobsScreen() {
                 ["Công ty", detail.customer?.company || "—"],
                 ["Số điện thoại", detail.toPhone || "—"],
                 ["Kênh", detail.channel],
-                ["Trạng thái", ({ QUEUED: "Chờ gửi", SENDING: "Đang gửi", SENT: "Đã gửi (Meta nhận)", DELIVERED: "Đã tới máy khách", READ: "Khách đã đọc", FAILED: "Thất bại" } as Record<string, string>)[(detail.status || "").toUpperCase()] || detail.status],
+                ["Trạng thái", ({ QUEUED: "Chờ gửi", SENDING: "Đang gửi", SENT: "Đã gửi (Meta nhận)", DELIVERED: "Đã tới máy khách", READ: "Khách đã đọc", HOLD: "Chờ hạn mức", FAILED: "Thất bại" } as Record<string, string>)[(detail.status || "").toUpperCase()] || detail.status],
                 ["Template", detail.batch?.template?.name || "—"],
                 ["Message ID", detail.messageId || "—"],
                 ["Lỗi", detail.error || "—"],

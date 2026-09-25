@@ -50,6 +50,18 @@ type Preview = {
   items: PItem[];
   sample: string;
   recipients: Recipient[];
+  quota: {
+    qualityRating: string | null;
+    limit: number | null;
+    safeLimit: number | null;
+    used24h: number;
+    remaining: number | null;
+    daysNeeded: number | null;
+    queuedAhead: number;
+    limitUnknown: boolean;
+  } | null;
+  phoneSummary: { mobile: number; fixedLine: number; ambiguous: number; unknown: number; noWhatsapp: number };
+  dryRun: boolean;
 };
 type Job = {
   id: string;
@@ -74,6 +86,10 @@ type Batch = {
 };
 
 const TERMINAL = ["SENT", "PARTIAL_FAILED", "CANCELLED"];
+// Số dòng khách TỐI ĐA vẽ ra màn hình ở bước xem trước. Danh sách nằm trong khung cao 220px nên
+// chỉ thấy vài dòng, nhưng trước đây vẽ HẾT: lệnh 8.000 khách = 8.000 dòng × 2 khối = 16.000 phần
+// tử DOM -> đứng trình duyệt. Dữ liệu gửi đi vẫn đủ, chỉ giới hạn phần hiển thị.
+const RECIPIENT_RENDER_LIMIT = 200;
 const jobColor: Record<string, string> = {
   QUEUED: "#B07208",
   SENDING: "#2F6FD6",
@@ -480,9 +496,40 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
 
   // ================= Wizard 3 bước =================
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  const qualityWarn = preview?.quota && (preview.quota.qualityRating === "YELLOW" || preview.quota.qualityRating === "RED");
   return (
     <div style={sx("max-width:760px")}>
       <Stepper step={step} maxStep={maxStep} onGo={setStep} />
+
+      {/* CHẾ ĐỘ GỬI GIẢ — phải đập vào mắt. Không có dải này thì bấm Gửi xong thấy "Đã gửi 8.000"
+          mà thực tế không tin nào rời máy, và không có cách nào nhận ra trên giao diện. */}
+      {preview?.dryRun && (
+        <div style={sx("display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; background:#FDF3E0; color:#8A6100; border:1px solid #F0E0C0")}>
+          <span style={sx("font-size:16px")}>🧪</span>
+          <span>
+            Đang ở <b>chế độ gửi thử</b> — hệ thống KHÔNG gửi tin thật cho khách, nhưng log vẫn hiện
+            &ldquo;Đã gửi&rdquo;. Đặt <code>SEND_DRY_RUN=false</code> rồi khởi động lại để gửi thật.
+          </span>
+        </div>
+      )}
+
+      {/* Dải cảnh báo chất lượng số (Việc 2) — hiện khi đã chọn template và chất lượng vàng/đỏ */}
+      {qualityWarn && (
+        <div
+          style={sx(
+            `display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; ${
+              preview!.quota!.qualityRating === "RED"
+                ? "background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6"
+                : "background:#FDF3E0; color:#B07208; border:1px solid #F0E0C0"
+            }`,
+          )}
+        >
+          <span style={sx("font-size:16px")}>{preview!.quota!.qualityRating === "RED" ? "🔴" : "🟡"}</span>
+          <span>
+            Chất lượng số đang ở mức {preview!.quota!.qualityRating === "RED" ? "kém" : "trung bình"} — khách đang chặn/báo cáo nhiều. Cân nhắc tạm dừng chiến dịch lớn.
+          </span>
+        </div>
+      )}
 
       {/* Bước 1: chọn template */}
       {step === 1 && (
@@ -674,7 +721,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
                 Khách nhận mẫu reply khi nhắn lại (theo danh sách gửi) — {preview.recipients.length}
               </div>
               <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto")}>
-                {preview.recipients.map((r) => (
+                {preview.recipients.slice(0, RECIPIENT_RENDER_LIMIT).map((r) => (
                   <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
                     <span style={sx("width:30px; height:30px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0")}>
                       {r.name.trim().split(/\s+/).slice(-2).map((x) => x[0]).join("").toUpperCase()}
@@ -683,6 +730,11 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
                     <span style={sx("font-size:12.5px; color:#8B9A90")}>{r.phone || "(thiếu SĐT)"}</span>
                   </div>
                 ))}
+                {preview.recipients.length > RECIPIENT_RENDER_LIMIT && (
+                  <div style={sx("padding:8px 12px; font-size:12.5px; color:#8B9A90; text-align:center")}>
+                    … và {(preview.recipients.length - RECIPIENT_RENDER_LIMIT).toLocaleString("vi-VN")} khách nữa (vẫn gắn đủ khi bấm Tiếp tục)
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -762,6 +814,36 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               </div>
             </div>
           </div>
+
+          {/* Hạn mức (Việc 3) + phân loại số (Việc 4) */}
+          {preview.quota && (
+            <div style={sx("display:flex; align-items:center; gap:8px; margin-top:12px; padding:10px 13px; border:1px solid #D9E7DD; background:#F4FBF6; border-radius:10px; font-size:13px; color:#1F4A2C")}>
+              <span style={sx("font-size:15px")}>⏳</span>
+              <span>
+                Hạn mức còn <b>{preview.quota.remaining != null ? preview.quota.remaining.toLocaleString("vi-VN") : "—"}</b> khách hôm nay.{" "}
+                Lệnh này <b>{preview.recipients.length.toLocaleString("vi-VN")}</b> khách
+                {preview.quota.daysNeeded != null && preview.quota.daysNeeded > 1
+                  ? `, dự kiến gửi xong sau khoảng ${preview.quota.daysNeeded} ngày.`
+                  : "."}
+                {preview.quota.queuedAhead > 0
+                  ? ` Hàng đợi đang còn ${preview.quota.queuedAhead.toLocaleString("vi-VN")} tin của lệnh khác gửi trước, lệnh này xếp sau.`
+                  : ""}
+                {preview.quota.limitUnknown
+                  ? " ⚠️ Meta không trả về hạn mức của số này — đây là mức giả định của hệ thống, số ngày dự kiến chỉ là ước lượng."
+                  : ""}
+              </span>
+            </div>
+          )}
+          {(preview.phoneSummary.fixedLine > 0 || preview.phoneSummary.noWhatsapp > 0) && (
+            <div style={sx("display:flex; align-items:center; gap:8px; margin-top:10px; padding:10px 13px; border:1px solid #F0E0C0; background:#FDF8EC; border-radius:10px; font-size:13px; color:#8A6100")}>
+              <span style={sx("font-size:15px")}>📞</span>
+              <span>
+                Trong <b>{preview.recipients.length.toLocaleString("vi-VN")}</b> khách có{" "}
+                <b>{preview.phoneSummary.fixedLine}</b> số máy bàn
+                {preview.phoneSummary.noWhatsapp > 0 ? `, ${preview.phoneSummary.noWhatsapp} số không có WhatsApp` : ""}.
+              </span>
+            </div>
+          )}
 
           {/* Bảng sản phẩm — chỉ tên sản phẩm + ngày tạo */}
           <div
@@ -849,7 +931,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
               "display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto",
             )}
           >
-            {preview.recipients.map((r) => (
+            {preview.recipients.slice(0, RECIPIENT_RENDER_LIMIT).map((r) => (
               <div
                 key={r.id}
                 style={sx(
@@ -881,6 +963,12 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
                 </span>
               </div>
             ))}
+            {preview.recipients.length > RECIPIENT_RENDER_LIMIT && (
+              <div style={sx("padding:8px 12px; font-size:12.5px; color:#8B9A90; text-align:center")}>
+                … và {(preview.recipients.length - RECIPIENT_RENDER_LIMIT).toLocaleString("vi-VN")} khách nữa (lệnh vẫn gửi đủ{" "}
+                {preview.recipients.length.toLocaleString("vi-VN")} khách)
+              </div>
+            )}
           </div>
 
         </div>

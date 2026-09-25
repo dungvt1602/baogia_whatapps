@@ -7,6 +7,7 @@ import { getJSON, postJSON } from "@/components/common/api";
 import { toast } from "sonner";
 import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
 import { applyDial, findCountry } from "@/components/common/countries";
+import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS } from "@/components/common/phoneTypeMeta";
 
 type CustRow = {
   id: string;
@@ -38,6 +39,8 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
   const [search, setSearch] = useState("");
   const [market, setMarket] = useState("");
   const [markets, setMarkets] = useState<string[]>([]);
+  const [phoneType, setPhoneType] = useState("");
+  const [onlyWhatsapp, setOnlyWhatsapp] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Chọn xuyên trang: id nào đang thuộc template này (từ các trang đã tải + từ API idsOnly) để đếm Thêm/Gỡ đúng.
@@ -52,6 +55,8 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
       const p = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
       if (search.trim()) p.set("search", search.trim());
       if (market) p.set("market", market);
+      if (phoneType) p.set("phoneType", phoneType);
+      if (onlyWhatsapp) p.set("hasWhatsapp", "1");
       const d = await getJSON<Paged>(`/api/customers/search?${p.toString()}`);
       setData(d);
       // Ghi nhớ trạng thái thuộc-template của các dòng vừa tải (phục vụ đếm khi chọn xuyên trang).
@@ -61,7 +66,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
         return n;
       });
     } catch (e) { setErr((e as Error).message); }
-  }, [page, search, market, templateId]);
+  }, [page, search, market, phoneType, onlyWhatsapp, templateId]);
 
   // Nạp danh sách (debounce cho gõ tìm kiếm).
   useEffect(() => {
@@ -95,6 +100,8 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
       const p = new URLSearchParams({ idsOnly: "1", templateId });
       if (search.trim()) p.set("search", search.trim());
       if (market) p.set("market", market);
+      if (phoneType) p.set("phoneType", phoneType);
+      if (onlyWhatsapp) p.set("hasWhatsapp", "1");
       const r = await getJSON<{ ids: string[]; total: number; inTemplateIds: string[] }>(`/api/customers/search?${p.toString()}`);
       const inSet = new Set(r.inTemplateIds);
       setInThisMap((m) => { const n = new Map(m); for (const id of r.ids) n.set(id, inSet.has(id)); return n; });
@@ -156,6 +163,14 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
           <option value="">🌏 Tất cả quốc gia</option>
           {markets.map((mk) => <option key={mk} value={mk}>{mk}</option>)}
         </select>
+        <select value={phoneType} onChange={(e) => { setPhoneType(e.target.value); setPage(1); }} style={sx(`${inp} height:34px; width:150px; padding:0 8px`)} title="Lọc theo loại số">
+          <option value="">📱 Tất cả loại số</option>
+          {PHONE_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{PHONE_TYPE_META[t].label}</option>)}
+        </select>
+        <label style={sx("display:inline-flex; align-items:center; gap:6px; height:34px; font-size:12.5px; color:#3C4A40; cursor:pointer; white-space:nowrap")} title="Chỉ hiện khách có số WhatsApp (để gửi được)">
+          <input type="checkbox" checked={onlyWhatsapp} onChange={(e) => { setOnlyWhatsapp(e.target.checked); setPage(1); }} style={sx("cursor:pointer; width:15px; height:15px")} />
+          Chỉ khách có số WhatsApp
+        </label>
         <div style={sx("font-size:12.5px; color:#7B8A80")}>{total} khách{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
         <HButton s={green} onClick={() => setNewC({ name: "", company: "", whatsappPhone: "", market: market })}>+ Khách mới</HButton>

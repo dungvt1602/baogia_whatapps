@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/server/db/prisma";
+import { graphGet } from "@/server/lib/whatsapp";
 
 // ĐỒNG BỘ ĐỊNH NGHĨA TEMPLATE TỪ META: server tự biết mẫu nào có nút FLOW hay URL,
 // header có ảnh hay không -> set cờ waFlow/waImage đúng cho toàn bộ template trong DB,
@@ -7,19 +8,7 @@ import { prisma } from "@/server/db/prisma";
 //
 // WABA ID tìm theo thứ tự: env WHATSAPP_WABA_ID -> API /me/assigned_whatsapp_business_accounts
 // -> app_settings.waba_id (tự bắt từ webhook: mỗi event WhatsApp đều chứa entry.id = WABA).
-
-const V = () => process.env.WHATSAPP_API_VERSION || "v22.0";
-
-async function graphGet(path: string): Promise<Record<string, unknown>> {
-  const token = process.env.WHATSAPP_TOKEN_MAIN;
-  if (!token) throw new Error("Thiếu WHATSAPP_TOKEN_MAIN.");
-  const res = await fetch(`https://graph.facebook.com/${V()}${path}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) throw new Error(`Graph API lỗi ${res.status}: ` + JSON.stringify((data as { error?: unknown })?.error || data).slice(0, 300));
-  return data;
-}
+// graphGet dùng chung (có timeout) lấy từ src/server/lib/whatsapp.ts.
 
 // Lưu WABA id bắt được từ webhook (entry.id). Gọi fire-and-forget, không phá webhook.
 let wabaCaptured = false; // đỡ ghi DB lặp trong cùng process
@@ -56,6 +45,70 @@ async function resolveWabaId(): Promise<string> {
       "Add assets -> WhatsApp accounts -> gán tài khoản WhatsApp (full control). " +
       "Hoặc chờ 1 tin webhook về (khách nhắn) là hệ thống tự bắt được.",
   );
+}
+
+// ============================================================
+// CHẤT LƯỢNG SỐ + HẠN MỨC (Việc 2) — đọc từ Meta, cache 10 phút.
+// ============================================================
+
+export type PhoneHealth = {
+  phoneNumberId: string;
+  displayPhoneNumber: string;
+  qualityRating: string;      // GREEN | YELLOW | RED | NA (NA = chưa xác định)
+  messagingLimitTier: string; // TIER_250 | TIER_2K | TIER_10K | ... (thang cấp portfolio)
+  status: string;             // trạng thái số (CONNECTED...) — FLAGGED đã bị Meta bỏ từ 07/10/2025
+  nameStatus: string;
+  throughput: string;
+  codeVerificationStatus: string;
+  verifiedName: string;
+  fetchedAt: string;          // ISO lúc fetch (để UI hiện "cập nhật lúc...")
+};
+
+const HEALTH_CACHE_MS = 10 * 60 * 1000;
+let healthCache: { at: number; data: PhoneHealth | null } = { at: 0, data: null };
+
+// Lấy phone_number_id: env trước, sau đó tới accountId của kênh WHATSAPP đang bật.
+async function resolvePhoneNumberId(): Promise<string | null> {
+  if (process.env.WHATSAPP_PHONE_NUMBER_ID) return process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const ch = await prisma.channel.findFirst({
+    where: { type: "WHATSAPP", isActive: true },
+    select: { accountId: true },
+    orderBy: { id: "asc" },
+  });
+  return ch?.accountId ?? null;
+}
+
+// Đọc chất lượng số + hạn mức từ Meta. KHÔNG bao giờ ném lỗi ra ngoài: lỗi mạng -> trả cache cũ
+// (nếu có), chưa có cache -> trả null. Màn Tổng quan không được sập vì Meta chậm.
+export async function getPhoneNumberHealth(force = false): Promise<PhoneHealth | null> {
+  if (!force && healthCache.data && Date.now() - healthCache.at < HEALTH_CACHE_MS) return healthCache.data;
+  try {
+    const phoneNumberId = await resolvePhoneNumberId();
+    if (!phoneNumberId) return null;
+    const d = await graphGet(
+      `/${phoneNumberId}?fields=quality_rating,messaging_limit_tier,status,name_status,throughput,code_verification_status,display_phone_number,verified_name`,
+      { timeoutMs: 8000 },
+    );
+    const data: PhoneHealth = {
+      phoneNumberId,
+      displayPhoneNumber: String(d.display_phone_number ?? ""),
+      qualityRating: String(d.quality_rating ?? "NA").toUpperCase(),
+      messagingLimitTier: String(d.messaging_limit_tier ?? "").toUpperCase(),
+      status: String(d.status ?? "").toUpperCase(),
+      nameStatus: String(d.name_status ?? "").toUpperCase(),
+      // throughput là OBJECT {level:"STANDARD"} chứ không phải chuỗi — String() thẳng sẽ ra
+      // "[OBJECT OBJECT]". Lấy .level; Meta đổi kiểu trả về thì rơi về chuỗi rỗng.
+      throughput: String((d.throughput as { level?: unknown } | null)?.level ?? "").toUpperCase(),
+      codeVerificationStatus: String(d.code_verification_status ?? "").toUpperCase(),
+      verifiedName: String(d.verified_name ?? ""),
+      fetchedAt: new Date().toISOString(),
+    };
+    healthCache = { at: Date.now(), data };
+    return data;
+  } catch (err) {
+    console.error("[metaHealth] lấy chất lượng số thất bại:", err instanceof Error ? err.message : err);
+    return healthCache.data; // lỗi mạng -> trả bản cũ (có thể null)
+  }
 }
 
 type MetaButton = { type?: string };

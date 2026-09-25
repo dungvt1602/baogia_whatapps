@@ -12,6 +12,19 @@ export async function register() {
     return;
   }
 
+  // NÓI TO chế độ gửi ngay lúc khởi động. Gửi giả không gọi Meta nhưng job vẫn đánh "Đã gửi",
+  // nên nếu cấu hình sai mà không có dòng log này thì không cách nào biết cho tới khi khách hỏi
+  // "sao chưa thấy báo giá".
+  const { isDryRun } = await import("@/server/lib/whatsapp");
+  if (isDryRun()) {
+    console.warn(
+      `[sendWorker] ⚠️  CHẾ ĐỘ GỬI GIẢ (SEND_DRY_RUN=${JSON.stringify(process.env.SEND_DRY_RUN ?? "")}). ` +
+        `KHÔNG có tin nào được gửi tới khách, nhưng log vẫn hiện "Đã gửi". Đặt SEND_DRY_RUN=false để gửi thật.`,
+    );
+  } else {
+    console.log("[sendWorker] Chế độ GỬI THẬT — tin sẽ được gửi tới khách hàng.");
+  }
+
   const pollMs = Number(process.env.SEND_WORKER_POLL_MS || 8000);
   const { processNextBatch } = await import("@/server/services/sendService");
 
@@ -31,7 +44,7 @@ export async function register() {
   // Dọn định kỳ: mỗi 10 PHÚT xóa log/phản hồi quá 3 ngày (bỏ điều kiện 2h sáng).
   // Xóa an toàn khi lặp lại: chỉ đụng bản ghi đã quá 3 ngày, đa số lần chạy xóa 0 dòng.
   const { cleanupSuccessLogs } = await import("@/server/services/activityService");
-  const { cleanupSendJobs } = await import("@/server/services/sendJobService");
+  const { cleanupSendJobs, cleanupStalePreviewBatches } = await import("@/server/services/sendJobService");
   const { cleanupInbound } = await import("@/server/services/inboundService");
   let cleaning = false;
   const runCleanup = async () => {
@@ -41,7 +54,8 @@ export async function register() {
       const a = await cleanupSuccessLogs(3); // activity_logs SUCCESS > 3 ngày
       const b = await cleanupSendJobs(3); // send_jobs tất cả > 3 ngày
       const c = await cleanupInbound(3); // inbound_messages tất cả > 3 ngày
-      if (a || b || c) console.log(`[logCleanup] xóa >3 ngày -> activity:${a} send_jobs:${b} inbound:${c}`);
+      const d = await cleanupStalePreviewBatches(1); // lệnh xem trước bỏ dở > 1 ngày (không có job)
+      if (a || b || c || d) console.log(`[logCleanup] xóa -> activity:${a} send_jobs:${b} inbound:${c} preview_bo_do:${d}`);
     } catch (err) {
       console.error("[logCleanup] error:", err);
     } finally {
