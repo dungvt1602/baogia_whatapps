@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { sx, HButton, HInput, SkeletonBar } from "@/components/common/ui";
 import { toast } from "sonner";
 
@@ -200,6 +201,7 @@ function Stepper({
 }
 
 export default function SendFlow({ actorName }: { actorName?: string }) {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [maxStep, setMaxStep] = useState(1);
 
@@ -763,6 +765,16 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             >
               Danh sách gửi
             </div>
+            <HButton
+              s={ghost}
+              onClick={() =>
+                router.push(
+                  `/template/${preview.template.id}/khach-hang?returnTo=${encodeURIComponent("/gui-bao-gia")}`,
+                )
+              }
+            >
+              + Thêm khách hàng
+            </HButton>
             <HButton
               s={ghost}
               onClick={() => {
