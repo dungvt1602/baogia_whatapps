@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { sx, HButton, HInput } from "@/components/common/ui";
 import { getJSON, postJSON } from "@/components/common/api";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS } from "@/components/common/phoneTy
 type CustRow = {
   id: string;
   name: string;
+  company: string | null;
   whatsappPhone: string | null;
   phone: string | null;
   email: string | null;
@@ -34,6 +35,13 @@ const gtd = "padding:6px 10px; font-size:12.5px; color:#1B2A20; border:1px solid
 
 export default function TemplateCustomersScreen({ templateId }: { templateId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Cho phép quay lại đúng nơi đã bấm "+ Thêm khách hàng" (vd. màn Gửi báo giá) thay vì luôn về
+  // trang chi tiết template. Chỉ nhận đường dẫn nội bộ (bắt đầu bằng "/", không phải "//") để
+  // tránh bị lợi dụng redirect ra ngoài qua query string.
+  const returnToParam = searchParams.get("returnTo");
+  const safeReturnTo = returnToParam && returnToParam.startsWith("/") && !returnToParam.startsWith("//") ? returnToParam : null;
+  const returnTo = safeReturnTo || `/template/${templateId}`;
   const [tplName, setTplName] = useState("");
   const [data, setData] = useState<Paged | null>(null);
   const [search, setSearch] = useState("");
@@ -147,7 +155,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
 
   return (
     <div>
-      <HButton s="display:inline-flex; align-items:center; gap:7px; border:none; background:none; color:#2F8F4E; font-size:13.5px; font-weight:600; cursor:pointer; padding:0; margin-bottom:12px" onClick={() => router.push(`/template/${templateId}`)}>‹ Về template</HButton>
+      <HButton s="display:inline-flex; align-items:center; gap:7px; border:none; background:none; color:#2F8F4E; font-size:13.5px; font-weight:600; cursor:pointer; padding:0; margin-bottom:12px" onClick={() => router.push(returnTo)}>{safeReturnTo ? "‹ Về gửi báo giá" : "‹ Về template"}</HButton>
       <div style={sx("font-size:20px; font-weight:700; color:#14261A; margin-bottom:2px; letter-spacing:-0.02em")}>Quản lý khách hàng</div>
       <div style={sx("font-size:13px; color:#7B8A80; margin-bottom:14px")}>Template: <b style={sx("color:#1F7440")}>{tplName || "…"}</b> — tick chọn nhiều rồi “Thêm đã chọn”, hoặc bấm Thêm/Gỡ từng dòng.</div>
 
@@ -157,7 +165,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
       <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap")}>
         <div style={sx("position:relative; width:260px")}>
           <span style={sx("position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; color:#9AA7A0")}>🔍</span>
-          <HInput s={`${inp} height:34px; padding-left:32px`} focus={focus} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm tên, SĐT, email..." />
+          <HInput s={`${inp} height:34px; padding-left:32px`} focus={focus} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm tên, công ty, SĐT, email..." />
         </div>
         <select value={market} onChange={(e) => { setMarket(e.target.value); setPage(1); }} style={sx(`${inp} height:34px; width:190px; padding:0 8px`)} title="Lọc theo quốc gia">
           <option value="">🌏 Tất cả quốc gia</option>
@@ -208,6 +216,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
               <th style={sx(gth + "; width:38px; text-align:center")}><input type="checkbox" checked={allChecked} onChange={toggleAll} style={sx("cursor:pointer")} /></th>
               <th style={sx(gth + "; width:44px; text-align:center")}>No.</th>
               <th style={sx(gth)}>Tên khách</th>
+              <th style={sx(gth)}>Công ty</th>
               <th style={sx(gth)}>WhatsApp / SĐT</th>
               <th style={sx(gth)}>Quốc gia</th>
               <th style={sx(gth)}>Trạng thái</th>
@@ -215,7 +224,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 && <tr><td colSpan={7} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có khách hàng khớp.</td></tr>}
+            {items.length === 0 && <tr><td colSpan={8} style={sx(gtd + "; text-align:center; color:#8B9A90; padding:24px")}>Không có khách hàng khớp.</td></tr>}
             {items.map((c, i) => {
               const on = selected.has(c.id);
               const here = inThis(c);
@@ -224,6 +233,7 @@ export default function TemplateCustomersScreen({ templateId }: { templateId: st
                   <td style={sx(gtd + "; text-align:center")}><input type="checkbox" checked={on} onChange={() => toggleOne(c.id)} style={sx("cursor:pointer")} /></td>
                   <td style={sx(gtd + "; text-align:center; color:#8B9A90")}>{(page - 1) * LIMIT + i + 1}</td>
                   <td style={sx(gtd + "; font-weight:600; color:#14261A; min-width:150px")}>{c.name}</td>
+                  <td style={sx(gtd + "; max-width:160px; overflow:hidden; text-overflow:ellipsis")} title={c.company || ""}>{c.company || "—"}</td>
                   <td style={sx(gtd)}>{c.whatsappPhone || c.phone || "—"}</td>
                   <td style={sx(gtd)}>{c.market || "—"}</td>
                   <td style={sx(gtd)}>
