@@ -767,16 +767,6 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             </div>
             <HButton
               s={ghost}
-              onClick={() =>
-                router.push(
-                  `/template/${preview.template.id}/khach-hang?returnTo=${encodeURIComponent("/gui-bao-gia")}`,
-                )
-              }
-            >
-              + Thêm khách hàng
-            </HButton>
-            <HButton
-              s={ghost}
               onClick={() => {
                 setPreview(null);
                 setStep(1);
@@ -924,15 +914,25 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
             </table>
           </div>
           {/* Danh sách khách nhận */}
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center" style={sx("margin-top:16px; margin-bottom:6px")}>
             <div
               style={sx(
-                "font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px",
+                "font-size:13px; font-weight:600; color:#3C4A40",
               )}
             >
               Khách nhận ({preview.recipients.length})
             </div>
-            <div style={sx("display:flex; gap:10px; margin:20px 0 6px;")}>
+            <div style={sx("display:flex; gap:10px")}>
+              <HButton
+                s={ghost}
+                onClick={() =>
+                  router.push(
+                    `/template/${preview.template.id}/khach-hang?returnTo=${encodeURIComponent("/gui-bao-gia")}`,
+                  )
+                }
+              >
+                + Thêm khách hàng
+              </HButton>
               <HButton s={`${green} flex:1`} onClick={goReply}>
                 Tiếp tục → chọn template reply
               </HButton>
