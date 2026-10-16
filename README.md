@@ -72,7 +72,8 @@ baogia_whatapps/
 │   ├── backfill-phone-type.ts  # Gắn nhãn loại số 1 lần cho khách hiện có (dry-run mặc định)
 │   └── migrations-manual/      # Migration viết tay (N-N template<->customer; cột phone_type + index)
 ├── scripts/
-│   └── smoke-pure.ts           # Test runtime các hàm thuần (npx tsx scripts/smoke-pure.ts)
+│   ├── smoke-pure.ts           # Test runtime các hàm thuần (npx tsx scripts/smoke-pure.ts)
+│   └── smoke-tracking-webhook.ts # Test chuyển tiếp nút nhận hàng + chữ ký X-Tracking-Signature (npx tsx scripts/smoke-tracking-webhook.ts)
 ├── src/
 │   ├── app/
 │   │   ├── layout.tsx          # Layout gốc: font, AuthProvider, Toaster, PWA, ActorHeaders
@@ -523,6 +524,10 @@ khi mất mạng.
   Danh tính trong nhật ký (`x-actor-id`/`x-actor-name` do `ActorHeaders` gắn) cũng do client tự
   khai, chỉ có giá trị tham khảo. Cần siết thì thêm kiểm tra ở tầng API/middleware.
 - **Webhook WhatsApp POST không kiểm chữ ký** `X-Hub-Signature-256` (khác webhook Zalo có kiểm).
+- **Chuyển tiếp nút "Confirm Goods Received" sang hệ thống theo dõi đơn** (`WHATSAPP_WEBHOOK_FORWARD_URL`): web gửi
+  nguyên raw body kèm header `X-Tracking-Signature: sha256=<hex>` = HMAC-SHA256 của body với `TRACKING_RELAY_SECRET`
+  (cùng giá trị ở backend; App Secret của Meta không chia sẻ). Đã bật URL mà thiếu secret thì KHÔNG gửi, trả 503 cho Meta
+  gửi lại. Backend trả 4xx = từ chối (không gửi lại), 5xx/lỗi mạng = Meta gửi lại.
 - **`SEND_DRY_RUN` mặc định là giả lập** — quên đặt `false` thì tin KHÔNG hề được gửi thật, nhưng
   log gửi vẫn hiện "Đã gửi"; dấu hiệu duy nhất là mã `DRYRUN-<uuid>`. Vì vậy app cảnh báo ở 2 chỗ:
   dòng log lúc khởi động và dải vàng trên màn Gửi báo giá.
