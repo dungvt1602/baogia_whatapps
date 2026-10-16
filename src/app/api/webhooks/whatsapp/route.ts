@@ -3,11 +3,16 @@ import { recordInbound, summarizeMessage, updateDeliveryStatus } from "@/server/
 import { notifyInboundReply } from "@/server/services/notificationService";
 import { maybeAutoReply } from "@/server/services/autoReplyService";
 import { captureWabaId } from "@/server/services/metaSyncService";
+import { forwardToTracking, isTrackingButtonMessage, trackingForwardUrl } from "@/server/lib/trackingWebhook";
 
 // Webhook WhatsApp (Meta gọi vào). Cần URL public + khai ở Meta App Dashboard:
 //   Callback URL: https://<domain>/api/webhooks/whatsapp
 //   Verify token: đúng bằng biến môi trường WHATSAPP_VERIFY_TOKEN
 //   Subscribe field: messages
+//
+// Dùng chung app Meta với hệ thống THEO DÕI ĐƠN HÀNG (1 app chỉ có 1 Callback URL): nút "Confirm Goods
+// Received" của hệ thống đó được CHUYỂN TIẾP nguyên văn (xem lib/trackingWebhook.ts, biến
+// WHATSAPP_WEBHOOK_FORWARD_URL) và KHÔNG đi vào luồng lưu/báo sếp/tự trả lời của web này.
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +33,18 @@ export async function GET(req: NextRequest) {
 // Nhận sự kiện: tin nhắn khách trả lời + trạng thái gửi.
 // LUÔN trả 200 để Meta không gửi lại dồn dập; lỗi xử lý nuốt vào log.
 export async function POST(req: NextRequest) {
+  // RAW body: phải giữ nguyên từng byte — chính chuỗi này được ký (X-Tracking-Signature) rồi chuyển sang
+  // hệ thống theo dõi đơn, nên không được parse/stringify lại trước khi chuyển.
+  const raw = await req.text();
   let body: unknown = {};
   try {
-    body = await req.json();
+    body = JSON.parse(raw);
   } catch {
     return NextResponse.json({ ok: true });
   }
+
+  const forwardEnabled = !!trackingForwardUrl();
+  let hasTrackingButton = false;
 
   try {
     const entries = Array.isArray((body as { entry?: unknown[] }).entry) ? (body as { entry: unknown[] }).entry : [];
@@ -67,6 +78,11 @@ export async function POST(req: NextRequest) {
         // Tin khách gửi đến (trả lời / bấm nút Flow).
         const messages = Array.isArray(value.messages) ? (value.messages as Record<string, unknown>[]) : [];
         for (const m of messages) {
+          // Nút của hệ thống theo dõi đơn: chuyển tiếp ở cuối, không lưu / không báo sếp / không tự trả lời.
+          if (forwardEnabled && isTrackingButtonMessage(m)) {
+            hasTrackingButton = true;
+            continue;
+          }
           const s = summarizeMessage(m);
           const saved = await recordInbound({
             waMessageId: String(m?.id || "") || null,
@@ -87,6 +103,13 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error("[whatsappWebhook] error:", err);
+  }
+
+  // Chuyển tiếp SAU xử lý cục bộ để lỗi bên này không làm mất xác nhận của khách.
+  // Lỗi mạng / hết giờ / 5xx -> trả 503 để Meta gửi lại (tin khác trong cùng body đã idempotent theo
+  // waMessageId). Bên kia từ chối (4xx, vd sai chữ ký) thì gửi lại vô ích -> vẫn 200.
+  if (hasTrackingButton && (await forwardToTracking(raw)) === "retry") {
+    return NextResponse.json({ ok: false }, { status: 503 });
   }
 
   return NextResponse.json({ ok: true });
