@@ -2,8 +2,9 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiUrl, getJSON, postJSON, patchJSON } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { sx, HButton, HInput, SkeletonBar } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonBar } from "@/components/shared/ui";
 import { toast } from "sonner";
 
 // ---- kiểu dữ liệu trả về từ API (BigInt -> string) ----
@@ -112,33 +113,6 @@ const fmtDate = (s: string | null) =>
         year: "numeric",
       }).format(new Date(s))
     : "—";
-
-async function getJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || `Lỗi ${res.status}`);
-  return data as T;
-}
-async function postJSON<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || `Lỗi ${res.status}`);
-  return data as T;
-}
-async function patchJSON<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || `Lỗi ${res.status}`);
-  return data as T;
-}
 
 const STEPS = ["Chọn template", "Danh sách gửi", "Chọn template reply", "Điền ảnh & gửi"];
 function Stepper({
@@ -349,7 +323,7 @@ export default function SendFlow({ actorName }: { actorName?: string }) {
     }
     setUploading(true);
     try {
-      const res = await fetch(`/api/templates/${selTpl.id}/image`, {
+      const res = await fetch(apiUrl(`/api/templates/${selTpl.id}/image`), {
         method: "POST",
         headers: { "content-type": file.type },
         body: file,

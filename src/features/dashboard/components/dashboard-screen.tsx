@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { sx, HButton, SkeletonBar } from "@/components/common/ui";
-import { getJSON } from "@/components/common/api";
+import { sx, HButton, SkeletonBar } from "@/components/shared/ui";
+import { getJSON } from "@/lib/api";
 
 type Activity = {
   id: string;

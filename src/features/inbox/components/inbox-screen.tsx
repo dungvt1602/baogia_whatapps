@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
-import { getJSON } from "@/components/common/api";
-import { getSupabaseBrowser } from "@/components/common/supabase";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/shared/ui";
+import { getJSON } from "@/lib/api";
+import { getSupabaseBrowser } from "@/lib/supabase";
 
 type Reply = {
   id: string;

@@ -1,7 +1,7 @@
 "use client";
 
-import type { Ctx } from "@/components/layout/useAgo";
-import { sx, HButton, HInput, HTextarea } from "@/components/common/ui";
+import type { Ctx } from "@/components/layout/use-ago";
+import { sx, HButton, HInput, HTextarea } from "@/components/shared/ui";
 
 const overlay = "position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:20px";
 const scrim = "position:absolute; inset:0; background:rgba(15,35,22,.45); backdrop-filter:blur(3px)";

@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { AgoProvider } from "@/components/layout/AgoContext";
-import AppChrome from "@/components/layout/AppChrome";
+import { AgoProvider } from "@/components/layout/ago-context";
+import AppChrome from "@/components/layout/app-chrome";
 
 // Layout dùng chung cho mọi màn trong app: chặn khi chưa đăng nhập, bọc chrome.
 export default function AppLayout({ children }: { children: React.ReactNode }) {

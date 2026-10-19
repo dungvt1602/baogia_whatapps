@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
-import { getJSON } from "@/components/common/api";
-import { actionLabel, actionGroup, GROUP_LABELS, type ActionGroup } from "@/components/common/activityLabels";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/shared/ui";
+import { getJSON } from "@/lib/api";
+import { actionLabel, actionGroup, GROUP_LABELS, type ActionGroup } from "@/lib/activity-labels";
 
 type Log = {
   id: string;

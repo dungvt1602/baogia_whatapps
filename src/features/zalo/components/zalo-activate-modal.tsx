@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sx, HButton } from "@/components/common/ui";
-import { getJSON, postJSON, sendJSON } from "@/components/common/api";
+import { sx, HButton } from "@/components/shared/ui";
+import { getJSON, postJSON, sendJSON } from "@/lib/api";
 import { toast } from "sonner";
 
 // Modal KÍCH HOẠT ZALO cho 1 tài khoản (giống nút "Kết nối" bên worker Go):

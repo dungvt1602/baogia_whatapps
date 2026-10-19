@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
-import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/shared/ui";
+import { getJSON, postJSON, patchJSON, sendJSON } from "@/lib/api";
 import { toast } from "sonner";
 
 type Channel = {

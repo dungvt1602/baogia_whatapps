@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
-import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
-import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
-import { applyDial, findCountry, splitPhone } from "@/components/common/countries";
-import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS, WA_STATUS_META } from "@/components/common/phoneTypeMeta";
-import { createCustomerSchema } from "@/lib/customer.schema";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/shared/ui";
+import { getJSON, postJSON, patchJSON, sendJSON } from "@/lib/api";
+import { CountrySelect, PhoneWithDial } from "@/components/shared/country-select";
+import { applyDial, findCountry, splitPhone } from "@/lib/countries";
+import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS, WA_STATUS_META } from "@/lib/phone-type-meta";
+import { createCustomerSchema } from "@/features/customers/schemas/customer-schema";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 

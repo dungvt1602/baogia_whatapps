@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { useAgo, type Ctx } from "@/components/layout/useAgo";
+import { useAgo, type Ctx } from "@/components/layout/use-ago";
 
 const AgoCtx = createContext<Ctx | null>(null);
 

@@ -1,7 +1,7 @@
 "use client";
 
-import type { Ctx } from "@/components/layout/useAgo";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import type { Ctx } from "@/components/layout/use-ago";
+import { sx, HButton, HInput } from "@/components/shared/ui";
 
 export function Dash({ v }: { v: Ctx }) {
   return (

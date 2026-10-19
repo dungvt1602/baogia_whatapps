@@ -2,11 +2,12 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useState } from "react";
-import { useAgoCtx } from "@/components/layout/AgoContext";
+import { apiUrl } from "@/lib/api";
+import { useAgoCtx } from "@/components/layout/ago-context";
 import { useAuth } from "@/lib/auth";
-import { sx, HButton, HDiv } from "@/components/common/ui";
-import { Modals } from "@/features/mock/Modals";
-import ZaloActivateModal from "@/features/zalo/ZaloActivateModal";
+import { sx, HButton, HDiv } from "@/components/shared/ui";
+import { Modals } from "@/features/mock/components/modals";
+import ZaloActivateModal from "@/features/zalo/components/zalo-activate-modal";
 
 // Khung app: sidebar + topbar dùng chung; nội dung màn = {children} (route segment).
 export default function AppChrome({ children }: { children: React.ReactNode }) {
@@ -20,7 +21,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
     if (!uid) return;
     (async () => {
       try {
-        const r = await fetch(`/api/users/${uid}/zalo`);
+        const r = await fetch(apiUrl(`/api/users/${uid}/zalo`));
         const d = (await r.json().catch(() => ({}))) as { linked?: boolean };
         if (r.ok) setZaloLinked(!!d.linked);
       } catch {
@@ -201,7 +202,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           userName={v.userName}
           onClose={() => setZaloOpen(false)}
           onChanged={() => {
-            void fetch(`/api/users/${uid}/zalo`)
+            void fetch(apiUrl(`/api/users/${uid}/zalo`))
               .then((r) => r.json())
               .then((d: { linked?: boolean }) => setZaloLinked(!!d.linked))
               .catch(() => {});

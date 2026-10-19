@@ -2,9 +2,10 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useState } from "react";
+import { apiUrl } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { sx, HButton, HInput } from "@/components/common/ui";
+import { sx, HButton, HInput } from "@/components/shared/ui";
 
 const field = "display:flex; align-items:center; height:50px; border-radius:11px; background:rgba(14,48,30,.38); border:1px solid rgba(255,255,255,.14)";
 const icon = "width:48px; text-align:center; color:rgba(255,255,255,.8); font-size:15px; border-right:1px solid rgba(255,255,255,.22)";
@@ -41,7 +42,7 @@ export default function Login() {
     setRegError(""); setBusy(true);
     try {
       const username = reg.email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "") || reg.email;
-      const res = await fetch("/api/users", {
+      const res = await fetch(apiUrl("/api/users"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username, email: reg.email, fullName: reg.name, password: reg.pass }),

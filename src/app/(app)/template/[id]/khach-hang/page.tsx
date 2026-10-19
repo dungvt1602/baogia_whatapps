@@ -1,4 +1,4 @@
-import TemplateCustomersScreen from "@/features/templates/TemplateCustomersScreen";
+import TemplateCustomersScreen from "@/features/templates/components/template-customers-screen";
 
 // Trang quản lý khách hàng của 1 template (thay cho popup kéo-thả cũ).
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {

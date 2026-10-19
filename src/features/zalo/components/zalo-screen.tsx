@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
-import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/shared/ui";
+import { getJSON, postJSON, patchJSON, sendJSON } from "@/lib/api";
 import { toast } from "sonner";
 
 // Màn ZALO OA — viết cho ADMIN (không phải dev). Chỉ 3 câu hỏi:

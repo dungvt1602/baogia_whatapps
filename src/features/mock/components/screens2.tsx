@@ -1,7 +1,7 @@
 "use client";
 
-import type { Ctx } from "@/components/layout/useAgo";
-import { sx, HButton } from "@/components/common/ui";
+import type { Ctx } from "@/components/layout/use-ago";
+import { sx, HButton } from "@/components/shared/ui";
 
 export function Customers({ v }: { v: Ctx }) {
   return (

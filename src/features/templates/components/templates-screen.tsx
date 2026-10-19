@@ -3,15 +3,16 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { sx, HButton, HInput, SkeletonCard } from "@/components/common/ui";
+import { sx, HButton, HInput, SkeletonCard } from "@/components/shared/ui";
 import {
+  apiUrl,
   getJSON,
   postJSON,
   patchJSON,
   sendJSON,
-} from "@/components/common/api";
+} from "@/lib/api";
 import { toast } from "sonner";
-import { type TplQuotation } from "./TemplateQuotationCard";
+import { type TplQuotation } from "./template-quotation-card";
 
 type Tpl = {
   id: string;
@@ -369,7 +370,7 @@ export default function TemplatesScreen() {
     setErr("");
     setUploading(true);
     try {
-      const res = await fetch(`/api/templates/${selT}/image`, {
+      const res = await fetch(apiUrl(`/api/templates/${selT}/image`), {
         method: "POST",
         headers: { "content-type": file.type },
         body: file,

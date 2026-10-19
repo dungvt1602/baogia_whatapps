@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { sx } from "@/components/common/ui";
-import { COUNTRIES, flagOf, findCountry, type Country } from "@/components/common/countries";
+import { sx } from "@/components/shared/ui";
+import { COUNTRIES, flagOf, findCountry, type Country } from "@/lib/countries";
 
 // Dropdown chọn quốc gia: in cứng toàn bộ quốc gia + ô tìm kiếm nhanh.
 // value = tên quốc gia đang lưu (hoặc giá trị tự do cũ). onSelect trả về Country.

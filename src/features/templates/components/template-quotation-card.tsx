@@ -6,8 +6,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, postJSON, patchJSON, putJSON } from "@/components/common/api";
+import { sx, HButton, HInput } from "@/components/shared/ui";
+import { getJSON, postJSON, patchJSON, putJSON } from "@/lib/api";
 import { toast } from "sonner";
 
 export type TplQuotationItem = {

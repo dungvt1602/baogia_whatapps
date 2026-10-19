@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, postJSON } from "@/components/common/api";
+import { sx, HButton, HInput } from "@/components/shared/ui";
+import { getJSON, postJSON } from "@/lib/api";
 import { toast } from "sonner";
-import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
-import { applyDial, findCountry } from "@/components/common/countries";
-import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS } from "@/components/common/phoneTypeMeta";
+import { CountrySelect, PhoneWithDial } from "@/components/shared/country-select";
+import { applyDial, findCountry } from "@/lib/countries";
+import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS } from "@/lib/phone-type-meta";
 
 type CustRow = {
   id: string;

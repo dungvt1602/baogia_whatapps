@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { sx, HButton, HInput, SkeletonRows } from "@/components/common/ui";
-import { getJSON } from "@/components/common/api";
+import { sx, HButton, HInput, SkeletonRows } from "@/components/shared/ui";
+import { getJSON } from "@/lib/api";
 
 type Job = {
   id: string;

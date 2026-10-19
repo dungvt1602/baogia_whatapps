@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { sx, HButton, HInput } from "@/components/common/ui";
-import { getJSON, putJSON, patchJSON, sendJSON } from "@/components/common/api";
+import { sx, HButton, HInput } from "@/components/shared/ui";
+import { getJSON, putJSON, patchJSON, sendJSON } from "@/lib/api";
 import { toast } from "sonner";
 
 type Q = {
