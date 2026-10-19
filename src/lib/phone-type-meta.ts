@@ -1,6 +1,6 @@
-// Nhãn + màu cho loại số điện thoại / trạng thái WhatsApp (đồng bộ với giá trị trong
-// src/server/lib/phoneType.ts và cột customers.phone_type / customers.wa_status).
-// File thuần dữ liệu (không "use client", không import server) -> dùng được ở cả FE lẫn BE.
+// Nhãn + màu cho loại số điện thoại / trạng thái WhatsApp (đồng bộ với giá trị backend
+// trả về: customers.phone_type / customers.wa_status).
+// File thuần dữ liệu (không "use client") -> dùng được ở cả server lẫn client component.
 
 export type PhoneTypeCode = "MOBILE" | "FIXED_LINE" | "AMBIGUOUS" | "UNKNOWN";
 
