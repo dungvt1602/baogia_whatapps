@@ -6,7 +6,7 @@ import { getJSON, postJSON, patchJSON, sendJSON } from "@/components/common/api"
 import { CountrySelect, PhoneWithDial } from "@/components/common/CountrySelect";
 import { applyDial, findCountry, splitPhone } from "@/components/common/countries";
 import { PHONE_TYPE_META, PHONE_TYPE_OPTIONS, WA_STATUS_META } from "@/components/common/phoneTypeMeta";
-import { createCustomerSchema } from "@/server/validation/customer.schema";
+import { createCustomerSchema } from "@/lib/customer.schema";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 

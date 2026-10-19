@@ -9,17 +9,10 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # ============================================================
-# Cài dependencies (chạy `prisma generate` qua postinstall)
+# Cài dependencies
 # ============================================================
 FROM base AS deps
-# Cần package + schema + config để postinstall `prisma generate` chạy được
 COPY package.json package-lock.json ./
-COPY prisma ./prisma
-COPY prisma.config.ts ./
-# Placeholder để prisma.config.ts (env()) load được lúc build. Giá trị thật đến từ
-# docker-compose (env_file) khi container chạy, không dính vào image.
-ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
-ENV DIRECT_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 RUN npm ci
 
 # ============================================================
@@ -27,8 +20,6 @@ RUN npm ci
 # ============================================================
 FROM base AS builder
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
-ENV DIRECT_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
@@ -44,7 +35,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 
-# Copy output standalone (đã trace sẵn node_modules cần thiết, gồm Prisma Client)
+# Copy output standalone (đã trace sẵn node_modules cần thiết)
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
