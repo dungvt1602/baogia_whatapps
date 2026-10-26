@@ -1,0 +1,1087 @@
+"use client";
+
+/* eslint-disable @next/next/no-img-element */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiUrl, getJSON, postJSON, patchJSON } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { sx, HButton, HInput, SkeletonBar } from "@/components/shared/ui";
+import { toast } from "sonner";
+
+// ---- kiểu dữ liệu trả về từ API (BigInt -> string) ----
+type Template = {
+  id: string;
+  name: string;
+  icon: string | null;
+  waTemplateName: string | null;
+  quotation: { id: string; code: string; title: string | null } | null;
+  channel: { id: string; name: string; type: string } | null;
+  _count: { customerLinks: number };
+};
+type Recipient = { id: string; name: string; phone: string };
+type PItem = {
+  no: number;
+  product: string;
+  packing: string | null;
+  unit: string | null;
+  quantity: unknown;
+  price: unknown;
+};
+type Preview = {
+  batch: {
+    id: string;
+    code: string;
+    quotationId: string;
+    recipientCount: number;
+    status: string;
+  };
+  channel: { name: string; type: string } | null;
+  template: {
+    id: string;
+    name: string;
+    productName: string | null;
+    createdAt: string;
+  };
+  quotation: {
+    code: string;
+    title: string | null;
+    market: string | null;
+    currency: string;
+    totalAmount: unknown;
+    validUntil: string | null;
+  };
+  items: PItem[];
+  sample: string;
+  recipients: Recipient[];
+  quota: {
+    qualityRating: string | null;
+    limit: number | null;
+    safeLimit: number | null;
+    used24h: number;
+    remaining: number | null;
+    daysNeeded: number | null;
+    queuedAhead: number;
+    limitUnknown: boolean;
+  } | null;
+  phoneSummary: { mobile: number; fixedLine: number; ambiguous: number; unknown: number; noWhatsapp: number };
+  dryRun: boolean;
+};
+type Job = {
+  id: string;
+  toName: string | null;
+  toPhone: string | null;
+  channel: string;
+  status: string;
+  messageId: string | null;
+  error: string | null;
+  retryCount: number;
+};
+type Batch = {
+  id: string;
+  code: string;
+  status: string;
+  note: string | null;
+  recipientCount: number;
+  quotation: { code: string; title: string | null };
+  template: { name: string };
+  channel: { name: string; type: string } | null;
+  jobs: Job[];
+};
+
+const TERMINAL = ["SENT", "PARTIAL_FAILED", "CANCELLED"];
+// Số dòng khách TỐI ĐA vẽ ra màn hình ở bước xem trước. Danh sách nằm trong khung cao 220px nên
+// chỉ thấy vài dòng, nhưng trước đây vẽ HẾT: lệnh 8.000 khách = 8.000 dòng × 2 khối = 16.000 phần
+// tử DOM -> đứng trình duyệt. Dữ liệu gửi đi vẫn đủ, chỉ giới hạn phần hiển thị.
+const RECIPIENT_RENDER_LIMIT = 200;
+const jobColor: Record<string, string> = {
+  QUEUED: "#B07208",
+  SENDING: "#2F6FD6",
+  SENT: "#1F7440",
+  FAILED: "#B3261E",
+};
+
+const card =
+  "background:#fff; border:1px solid #E9EEE9; border-radius:16px; padding:18px";
+const green =
+  "border:none; border-radius:11px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:14px; font-weight:600; cursor:pointer; padding:0 18px; height:44px";
+const ghost =
+  "border:1px solid #DCE3DC; border-radius:11px; background:#fff; color:#4A5A4E; font-size:14px; font-weight:600; cursor:pointer; padding:0 16px; height:44px";
+const fmtDate = (s: string | null) =>
+  s
+    ? new Intl.DateTimeFormat("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(new Date(s))
+    : "—";
+
+const STEPS = ["Chọn template", "Danh sách gửi", "Chọn template reply", "Điền ảnh & gửi"];
+function Stepper({
+  step,
+  maxStep,
+  onGo,
+}: {
+  step: number;
+  maxStep: number;
+  onGo: (n: number) => void;
+}) {
+  return (
+    <div
+      style={sx(
+        "display:flex; align-items:center; gap:6px; margin-bottom:16px; flex-wrap:wrap",
+      )}
+    >
+      {STEPS.map((label, i) => {
+        const n = i + 1;
+        const done = n < step,
+          active = n === step;
+        const canGo = n <= maxStep && n !== step;
+        const bg = done ? "#1F7440" : active ? "#EAF3EC" : "#F1F4F1";
+        const fg = done ? "#fff" : active ? "#1F7440" : "#9AA7A0";
+        return (
+          <div
+            key={label}
+            style={sx("display:flex; align-items:center; gap:6px")}
+          >
+            <div
+              onClick={() => canGo && onGo(n)}
+              title={canGo ? "Sang bước này" : undefined}
+              style={sx(
+                `display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:20px; background:${active ? "#EAF3EC" : "transparent"}; cursor:${canGo ? "pointer" : "default"}`,
+              )}
+            >
+              <span
+                style={sx(
+                  `width:24px; height:24px; border-radius:50%; background:${bg}; color:${fg}; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:700`,
+                )}
+              >
+                {done ? "✓" : n}
+              </span>
+              <span
+                style={sx(
+                  `font-size:13px; font-weight:600; color:${active ? "#14261A" : canGo ? "#2F8F4E" : "#8B9A90"}; ${canGo ? "text-decoration:underline; text-underline-offset:2px" : ""}`,
+                )}
+              >
+                {label}
+              </span>
+            </div>
+            {n < STEPS.length && (
+              <span style={sx("color:#CBD6CD; font-size:14px")}>›</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function SendFlow({ actorName }: { actorName?: string }) {
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [maxStep, setMaxStep] = useState(1);
+
+  const [templates, setTemplates] = useState<Template[]>([]); // template của trang hiện tại
+  const [loadingT, setLoadingT] = useState(true);
+  const [selTpl, setSelTpl] = useState<Template | null>(null);
+  const [search, setSearch] = useState(""); // ô nhập tìm kiếm
+  const [debouncedSearch, setDebouncedSearch] = useState(""); // từ khoá đã debounce -> gọi API
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  // Bước 2 — chọn template reply (mẫu trả lời tự động khi khách phản hồi đợt gửi này)
+  const [replyTpls, setReplyTpls] = useState<(Template & { autoReply?: boolean })[]>([]);
+  const [selReply, setSelReply] = useState<Template | null>(null); // null = không trả lời tự động
+
+  const [imgKey, setImgKey] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [hasImage, setHasImage] = useState<boolean | null>(null);
+  const [skipImage, setSkipImage] = useState(false); // xác nhận gửi không kèm ảnh
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [batchId, setBatchId] = useState<string>("");
+  const [batch, setBatch] = useState<Batch | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Tải template theo TRANG từ server (phân trang + tìm kiếm) — chịu được nhiều template (vd 1000).
+  const LIMIT = 12;
+  const loadTemplates = useCallback(async () => {
+    try {
+      const r = await getJSON<{ items: Template[]; total: number }>(
+        `/api/templates?page=${page}&limit=${LIMIT}&search=${encodeURIComponent(debouncedSearch)}&kind=send`,
+      );
+      setTemplates(r.items);
+      setTotal(r.total);
+    } catch (e) {
+      setTemplates([]);
+      toast.error((e as Error).message);
+    } finally {
+      setLoadingT(false);
+    }
+  }, [page, debouncedSearch]);
+  useEffect(() => {
+    (async () => {
+      await loadTemplates();
+    })();
+  }, [loadTemplates]);
+
+  // Debounce ô tìm kiếm: gõ xong 300ms mới gọi API (tránh gọi liên tục theo từng ký tự).
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+
+  // Tải danh sách mẫu REPLY (bước 2) — chọn sẵn mẫu đang bật trả lời tự động.
+  useEffect(() => {
+    getJSON<{ items: (Template & { autoReply?: boolean })[]; total: number }>(
+      "/api/templates?page=1&limit=50&kind=reply",
+    )
+      .then((r) => {
+        setReplyTpls(r.items);
+        setSelReply(r.items.find((t) => t.autoReply) || null);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Bước 3 -> 4: lưu lựa chọn mẫu reply (bật mẫu chọn — server tự tắt mẫu khác; chọn
+  // "Không trả lời" -> tắt mẫu đang bật) rồi sang bước điền ảnh.
+  const [savingReply, setSavingReply] = useState(false);
+  async function confirmReply() {
+    setSavingReply(true);
+    try {
+      if (selReply) {
+        await patchJSON(`/api/templates/${selReply.id}`, { autoReply: true });
+        // Gắn TOÀN BỘ khách của đợt gửi này vào mẫu reply (trùng bỏ qua) — danh sách
+        // nhận reply khớp đúng danh sách gửi báo giá.
+        if (preview?.recipients.length) {
+          await postJSON(`/api/templates/${selReply.id}/customers/link`, {
+            customerIds: preview.recipients.map((r) => r.id),
+          });
+        }
+      } else {
+        const active = replyTpls.find((t) => (t as Template & { autoReply?: boolean }).autoReply);
+        if (active) await patchJSON(`/api/templates/${active.id}`, { autoReply: false });
+      }
+      setReplyTpls((list) =>
+        list.map((t) => ({ ...t, autoReply: selReply ? t.id === selReply.id : false })),
+      );
+      goImage(); // sang bước 4
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingReply(false);
+    }
+  }
+
+  // Bước 1 -> 2: chọn template + tạo preview (báo giá lấy từ chính template).
+  const pickTemplate = useCallback(
+    async (t: Template) => {
+      setSelTpl(t);
+      setBusy(true);
+      try {
+        setPreview(
+          await postJSON<Preview>("/api/send/preview", {
+            templateId: t.id,
+            actor: { name: actorName },
+          }),
+        );
+        setStep(2);
+        setMaxStep(2);
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [actorName],
+  );
+
+  // Bước 2 -> 3: sang bước chọn template reply
+  function goReply() {
+    setStep(3);
+    setMaxStep(3);
+  }
+
+  // -> Bước 4: sang bước điền ảnh
+  function goImage() {
+    setHasImage(null);
+    setSkipImage(false);
+    setImgKey((k) => k + 1);
+    setStep(4);
+    setMaxStep(4);
+  }
+
+  async function uploadImage(file: File | undefined) {
+    if (!file || !selTpl) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("File phải là ảnh.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ảnh quá lớn (tối đa 5MB).");
+      return;
+    }
+    setUploading(true);
+    try {
+      const res = await fetch(apiUrl(`/api/templates/${selTpl.id}/image`), {
+        method: "POST",
+        headers: { "content-type": file.type },
+        body: file,
+      });
+      if (!res.ok)
+        throw new Error(
+          (await res.json().catch(() => ({})))?.error || `Lỗi ${res.status}`,
+        );
+      setHasImage(true);
+      setImgKey((k) => k + 1);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  const doConfirm = useCallback(async () => {
+    if (!preview) return;
+    setBusy(true);
+    try {
+      const r = await postJSON<{ batchId: string }>("/api/send/confirm", {
+        batchId: preview.batch.id,
+        actor: { name: actorName },
+      });
+      setPreview(null);
+      setBatchId(String(r.batchId));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [preview, actorName]);
+
+  // Poll trạng thái sau khi gửi
+  useEffect(() => {
+    if (!batchId) return;
+    const tick = async () => {
+      try {
+        const b = await getJSON<Batch>(`/api/send/batches/${batchId}`);
+        setBatch(b);
+        if (TERMINAL.includes(b.status) && pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      } catch {
+        /* giữ nguyên */
+      }
+    };
+    tick();
+    pollRef.current = setInterval(tick, 2000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+    };
+  }, [batchId]);
+
+  function resetAll() {
+    setBatchId("");
+    setBatch(null);
+    setPreview(null);
+    setSelTpl(null);
+    setStep(1);
+    setMaxStep(1);
+  }
+
+  // ================= Đang theo dõi lệnh gửi =================
+  if (batchId) {
+    const sentCount =
+      batch?.jobs.filter((j) => j.status === "SENT").length ?? 0;
+    const failedCount =
+      batch?.jobs.filter((j) => j.status === "FAILED").length ?? 0;
+    const done = batch ? TERMINAL.includes(batch.status) : false;
+    return (
+      <div style={sx("max-width:840px")}>
+        <div style={sx(card)}>
+          <div style={sx("display:flex; align-items:center; gap:10px")}>
+            <div
+              style={sx(
+                "font-size:16px; font-weight:700; color:#14261A; flex:1",
+              )}
+            >
+              Đang gửi: {batch?.code || batchId}
+            </div>
+            <span
+              style={sx(
+                `font-size:12px; font-weight:700; padding:5px 12px; border-radius:20px; background:${done ? "#E7F5EC" : "#FDF3E0"}; color:${done ? "#1F7440" : "#B07208"}`,
+              )}
+            >
+              {batch?.status || "..."}
+            </span>
+          </div>
+          <div style={sx("font-size:13px; color:#7B8A80; margin-top:6px")}>
+            {batch
+              ? `${batch.template.name} · ${batch.channel?.name || "kênh mặc định"} · `
+              : ""}
+            Thành công {sentCount}/{batch?.recipientCount ?? 0}
+            {failedCount ? `, lỗi ${failedCount}` : ""}
+          </div>
+          {!done && (
+            <div style={sx("font-size:12.5px; color:#2F6FD6; margin-top:8px")}>
+              ⏳ Worker đang gửi, tự cập nhật mỗi 2s...
+            </div>
+          )}
+          <div
+            style={sx(
+              "margin-top:16px; display:flex; flex-direction:column; gap:8px",
+            )}
+          >
+            {batch?.jobs.map((j) => (
+              <div
+                key={j.id}
+                style={sx(
+                  "display:flex; align-items:center; gap:12px; padding:11px 13px; border:1px solid #F0F3F0; border-radius:11px",
+                )}
+              >
+                <div style={sx("min-width:0; flex:1")}>
+                  <div
+                    style={sx("font-size:14px; font-weight:600; color:#14261A")}
+                  >
+                    {j.toName}
+                  </div>
+                  <div style={sx("font-size:12px; color:#8B9A90")}>
+                    {j.toPhone} · {j.channel}
+                    {j.error ? ` · ${j.error}` : ""}
+                  </div>
+                </div>
+                <span
+                  style={sx(
+                    `font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:20px; color:${jobColor[j.status] || "#4A5A4E"}; background:#F5F8F5`,
+                  )}
+                >
+                  {j.status}
+                </span>
+              </div>
+            ))}
+          </div>
+          <HButton s={`${green} margin-top:18px`} onClick={resetAll}>
+            ← Gửi lệnh khác
+          </HButton>
+        </div>
+      </div>
+    );
+  }
+
+  // ================= Wizard 3 bước =================
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  const qualityWarn = preview?.quota && (preview.quota.qualityRating === "YELLOW" || preview.quota.qualityRating === "RED");
+  return (
+    <div style={sx("max-width:760px")}>
+      <Stepper step={step} maxStep={maxStep} onGo={setStep} />
+
+      {/* CHẾ ĐỘ GỬI GIẢ — phải đập vào mắt. Không có dải này thì bấm Gửi xong thấy "Đã gửi 8.000"
+          mà thực tế không tin nào rời máy, và không có cách nào nhận ra trên giao diện. */}
+      {preview?.dryRun && (
+        <div style={sx("display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; background:#FDF3E0; color:#8A6100; border:1px solid #F0E0C0")}>
+          <span style={sx("font-size:16px")}>🧪</span>
+          <span>
+            Đang ở <b>chế độ gửi thử</b> — hệ thống KHÔNG gửi tin thật cho khách, nhưng log vẫn hiện
+            &ldquo;Đã gửi&rdquo;. Đặt <code>SEND_DRY_RUN=false</code> rồi khởi động lại để gửi thật.
+          </span>
+        </div>
+      )}
+
+      {/* Dải cảnh báo chất lượng số (Việc 2) — hiện khi đã chọn template và chất lượng vàng/đỏ */}
+      {qualityWarn && (
+        <div
+          style={sx(
+            `display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; ${
+              preview!.quota!.qualityRating === "RED"
+                ? "background:#FDECEC; color:#B3261E; border:1px solid #F3C9C6"
+                : "background:#FDF3E0; color:#B07208; border:1px solid #F0E0C0"
+            }`,
+          )}
+        >
+          <span style={sx("font-size:16px")}>{preview!.quota!.qualityRating === "RED" ? "🔴" : "🟡"}</span>
+          <span>
+            Chất lượng số đang ở mức {preview!.quota!.qualityRating === "RED" ? "kém" : "trung bình"} — khách đang chặn/báo cáo nhiều. Cân nhắc tạm dừng chiến dịch lớn.
+          </span>
+        </div>
+      )}
+
+      {/* Bước 1: chọn template */}
+      {step === 1 && (
+        <div style={sx(card)}>
+          <div
+            style={sx(
+              "display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap",
+            )}
+          >
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A")}>
+              Chọn template cần gửi
+            </div>
+            <div
+              style={sx(
+                "font-size:12.5px; color:#7B8A80; flex:1; text-align:right",
+              )}
+            >
+              {total} template
+            </div>
+          </div>
+          {/* Ô tìm kiếm template (tên / mã báo giá / tên template Meta) — tìm trên toàn bộ, server phân trang */}
+          <div style={sx("position:relative; margin-bottom:12px")}>
+            <span
+              style={sx(
+                "position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:13px; color:#9AA7A0",
+              )}
+            >
+              🔍
+            </span>
+            <HInput
+              s="height:38px; border-width:1.5px; border-style:solid; border-color:#DFE6E0; border-radius:10px; padding:0 12px 0 34px; font-size:13.5px; color:#14261A; outline:none; width:100%;"
+              focus="border-color:#3EA85C; box-shadow:0 0 0 3px rgba(62,168,92,.14)"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Tìm tên template hoặc mã báo giá..."
+            />
+          </div>
+          {loadingT && (
+            <div style={sx("display:flex; flex-direction:column; gap:8px")}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} style={sx("display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px; background:#fff")}>
+                  <div className="ago-skeleton" style={sx("width:38px; height:38px; border-radius:11px; flex-shrink:0")} />
+                  <div style={sx("min-width:0; flex:1; display:flex; flex-direction:column; gap:7px")}>
+                    <SkeletonBar w="55%" h="13px" />
+                    <SkeletonBar w="70%" h="10px" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {busy && (
+            <div style={sx("font-size:13px; color:#2F6FD6")}>
+              Đang lấy danh sách gửi...
+            </div>
+          )}
+          {!loadingT && total === 0 && (
+            <div style={sx("font-size:13px; color:#8B9A90")}>
+              {debouncedSearch
+                ? `Không tìm thấy template khớp “${debouncedSearch}”.`
+                : "Chưa có template nào. Vào menu Template để tạo."}
+            </div>
+          )}
+          <div style={sx("display:flex; flex-direction:column; gap:8px")}>
+            {templates.map((t) => (
+              <div
+                key={t.id}
+                onClick={() => !busy && pickTemplate(t)}
+                style={sx(
+                  "display:flex; align-items:center; gap:12px; padding:13px; border:1px solid #E9EEE9; border-radius:12px; cursor:pointer; background:#fff",
+                )}
+              >
+                <div
+                  style={sx(
+                    "width:38px; height:38px; border-radius:11px; background:#F1F5F1; display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0",
+                  )}
+                >
+                  {t.icon || "📄"}
+                </div>
+                <div style={sx("min-width:0; flex:1")}>
+                  <div
+                    style={sx("font-size:14px; font-weight:600; color:#14261A")}
+                  >
+                    {t.name}
+                  </div>
+                  <div
+                    style={sx(
+                      "font-size:12px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis",
+                    )}
+                  >
+                    {t.quotation?.code || "—"} · {t._count.customerLinks} khách
+                    · {t.channel ? t.channel.type : "chưa gắn kênh"}
+                    {t.waTemplateName ? ` · ${t.waTemplateName}` : ""}
+                  </div>
+                </div>
+                <span
+                  style={sx("color:#B9C5BC; font-size:18px; flex-shrink:0")}
+                >
+                  ›
+                </span>
+              </div>
+            ))}
+          </div>
+          {/* Phân trang server-side */}
+          {totalPages > 1 && (
+            <div
+              style={sx(
+                "display:flex; align-items:center; gap:8px; margin-top:14px",
+              )}
+            >
+              <div style={sx("font-size:12.5px; color:#7B8A80; flex:1")}>
+                Trang {page}/{totalPages}
+              </div>
+              <HButton
+                s={`${ghost} ${page <= 1 ? "opacity:.45; pointer-events:none" : ""}`}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                ‹ Trước
+              </HButton>
+              <HButton
+                s={`${ghost} ${page >= totalPages ? "opacity:.45; pointer-events:none" : ""}`}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Sau ›
+              </HButton>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bước 3: chọn template REPLY — mẫu tự trả lời khi khách phản hồi đợt gửi này */}
+      {step === 3 && (
+        <div style={sx(card)}>
+          <div style={sx("display:flex; align-items:center; gap:8px; margin-bottom:6px")}>
+            <div style={sx("font-size:15px; font-weight:700; color:#14261A; flex:1")}>
+              Chọn template reply
+            </div>
+            <HButton s={ghost} onClick={() => setStep(2)}>
+              ‹ Xem lại danh sách
+            </HButton>
+          </div>
+          <div style={sx("font-size:12.5px; color:#7B8A80; margin-bottom:12px")}>
+            Khách nhắn lại / bấm nút Flow sau đợt gửi sẽ nhận ngay mẫu này (kèm tên khách,
+            tối đa 1 lần/60 phút mỗi số). Chọn “Không trả lời tự động” nếu không muốn.
+          </div>
+          <div style={sx("display:flex; flex-direction:column; gap:10px")}>
+            <HButton
+              onClick={() => setSelReply(null)}
+              s={`display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:${selReply === null ? "#EAF3EC" : "#fff"}; border-width:1.5px; border-style:solid; border-color:${selReply === null ? "#3EA85C" : "#E9EEE9"}; border-radius:14px; padding:14px; cursor:pointer`}
+            >
+              <div style={sx("width:40px; height:40px; border-radius:11px; background:#F1F4F1; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>🚫</div>
+              <div style={sx("min-width:0; flex:1")}>
+                <div style={sx("font-size:14px; font-weight:700; color:#14261A")}>Không trả lời tự động</div>
+                <div style={sx("font-size:12.5px; color:#8B9A90")}>Khách nhắn lại chỉ hiện ở Hộp thư + báo sếp, không gửi gì cho khách.</div>
+              </div>
+              {selReply === null && <span style={sx("color:#1F7440; font-weight:700; flex-shrink:0")}>✓</span>}
+            </HButton>
+            {replyTpls.map((t) => {
+              const on = selReply?.id === t.id;
+              return (
+                <HButton
+                  key={t.id}
+                  onClick={() => setSelReply(t)}
+                  s={`display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:${on ? "#EAF3EC" : "#fff"}; border-width:1.5px; border-style:solid; border-color:${on ? "#3EA85C" : "#E9EEE9"}; border-radius:14px; padding:14px; cursor:pointer`}
+                >
+                  <div style={sx("width:40px; height:40px; border-radius:11px; background:#EAF3EC; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0")}>{t.icon || "↩"}</div>
+                  <div style={sx("min-width:0; flex:1")}>
+                    <div style={sx("font-size:14px; font-weight:700; color:#14261A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.name}</div>
+                    <div style={sx("font-size:12.5px; color:#8B9A90; white-space:nowrap; overflow:hidden; text-overflow:ellipsis")}>{t.waTemplateName || "—"} · {t._count.customerLinks} khách đã phản hồi</div>
+                  </div>
+                  {on && <span style={sx("color:#1F7440; font-weight:700; flex-shrink:0")}>✓</span>}
+                </HButton>
+              );
+            })}
+            {replyTpls.length === 0 && (
+              <div style={sx("font-size:13px; color:#8B9A90; padding:6px 0")}>
+                Chưa có mẫu reply nào. Tạo ở menu Template và tích “Dùng làm mẫu TRẢ LỜI TỰ ĐỘNG”, hoặc chọn “Không trả lời tự động”.
+              </div>
+            )}
+          </div>
+
+          {/* Danh sách người nhận mẫu reply = ĐÚNG danh sách gửi báo giá đợt này (bước 2).
+              Bấm Tiếp tục sẽ gắn toàn bộ khách này vào mẫu reply đã chọn. */}
+          {selReply && preview && (
+            <div style={sx("margin-top:16px; padding-top:14px; border-top:1px solid #EFF3EF")}>
+              <div style={sx("font-size:13.5px; font-weight:700; color:#14261A; margin-bottom:8px")}>
+                Khách nhận mẫu reply khi nhắn lại (theo danh sách gửi) — {preview.recipients.length}
+              </div>
+              <div style={sx("display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto")}>
+                {preview.recipients.slice(0, RECIPIENT_RENDER_LIMIT).map((r) => (
+                  <div key={r.id} style={sx("display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px")}>
+                    <span style={sx("width:30px; height:30px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0")}>
+                      {r.name.trim().split(/\s+/).slice(-2).map((x) => x[0]).join("").toUpperCase()}
+                    </span>
+                    <span style={sx("font-size:13.5px; font-weight:600; color:#14261A; flex:1")}>{r.name}</span>
+                    <span style={sx("font-size:12.5px; color:#8B9A90")}>{r.phone || "(thiếu SĐT)"}</span>
+                  </div>
+                ))}
+                {preview.recipients.length > RECIPIENT_RENDER_LIMIT && (
+                  <div style={sx("padding:8px 12px; font-size:12.5px; color:#8B9A90; text-align:center")}>
+                    … và {(preview.recipients.length - RECIPIENT_RENDER_LIMIT).toLocaleString("vi-VN")} khách nữa (vẫn gắn đủ khi bấm Tiếp tục)
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <HButton
+            s={`${green} width:100%; height:46px; margin-top:14px ${savingReply ? "; opacity:.6; pointer-events:none" : ""}`}
+            onClick={confirmReply}
+          >
+            {savingReply ? "Đang lưu..." : "Tiếp tục →"}
+          </HButton>
+        </div>
+      )}
+
+      {/* Bước 2: danh sách gửi (xem trước) */}
+      {step === 2 && preview && (
+        <div style={sx(card)}>
+          <div
+            style={sx(
+              "display:flex; align-items:center; gap:8px; margin-bottom:12px",
+            )}
+          >
+            <div
+              style={sx(
+                "font-size:15px; font-weight:700; color:#14261A; flex:1",
+              )}
+            >
+              Danh sách gửi
+            </div>
+            <HButton
+              s={ghost}
+              onClick={() => {
+                setPreview(null);
+                setStep(1);
+              }}
+            >
+              ‹ Đổi template
+            </HButton>
+          </div>
+
+          {/* Đầu mục — tiêu đề là tên template */}
+          <div
+            style={sx(
+              "background:linear-gradient(135deg,#1F7440,#123E24); color:#fff; border-radius:14px; padding:15px 16px",
+            )}
+          >
+            <div
+              style={sx(
+                "font-size:14px; font-weight:700; letter-spacing:.02em",
+              )}
+            >
+              📋 {preview.template.name}
+            </div>
+            <div
+              className="ago-collapse"
+              style={sx(
+                "display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:10px; font-size:12.5px; color:#CDE8D5",
+              )}
+            >
+              <div>
+                Mã lệnh: <b style={sx("color:#fff")}>{preview.batch.code}</b>
+              </div>
+              <div>
+                Số khách nhận:{" "}
+                <b style={sx("color:#fff")}>{preview.recipients.length}</b>
+              </div>
+              <div>
+                Kênh:{" "}
+                <b style={sx("color:#fff")}>
+                  {preview.channel?.name || "mặc định"}
+                </b>
+              </div>
+              <div>
+                Hiệu lực đến:{" "}
+                <b style={sx("color:#fff")}>
+                  {fmtDate(preview.quotation.validUntil)}
+                </b>
+              </div>
+            </div>
+          </div>
+
+          {/* Hạn mức (Việc 3) + phân loại số (Việc 4) */}
+          {preview.quota && (
+            <div style={sx("display:flex; align-items:center; gap:8px; margin-top:12px; padding:10px 13px; border:1px solid #D9E7DD; background:#F4FBF6; border-radius:10px; font-size:13px; color:#1F4A2C")}>
+              <span style={sx("font-size:15px")}>⏳</span>
+              <span>
+                Hạn mức còn <b>{preview.quota.remaining != null ? preview.quota.remaining.toLocaleString("vi-VN") : "—"}</b> khách hôm nay.{" "}
+                Lệnh này <b>{preview.recipients.length.toLocaleString("vi-VN")}</b> khách
+                {preview.quota.daysNeeded != null && preview.quota.daysNeeded > 1
+                  ? `, dự kiến gửi xong sau khoảng ${preview.quota.daysNeeded} ngày.`
+                  : "."}
+                {preview.quota.queuedAhead > 0
+                  ? ` Hàng đợi đang còn ${preview.quota.queuedAhead.toLocaleString("vi-VN")} tin của lệnh khác gửi trước, lệnh này xếp sau.`
+                  : ""}
+                {preview.quota.limitUnknown
+                  ? " ⚠️ Meta không trả về hạn mức của số này — đây là mức giả định của hệ thống, số ngày dự kiến chỉ là ước lượng."
+                  : ""}
+              </span>
+            </div>
+          )}
+          {(preview.phoneSummary.fixedLine > 0 || preview.phoneSummary.noWhatsapp > 0) && (
+            <div style={sx("display:flex; align-items:center; gap:8px; margin-top:10px; padding:10px 13px; border:1px solid #F0E0C0; background:#FDF8EC; border-radius:10px; font-size:13px; color:#8A6100")}>
+              <span style={sx("font-size:15px")}>📞</span>
+              <span>
+                Trong <b>{preview.recipients.length.toLocaleString("vi-VN")}</b> khách có{" "}
+                <b>{preview.phoneSummary.fixedLine}</b> số máy bàn
+                {preview.phoneSummary.noWhatsapp > 0 ? `, ${preview.phoneSummary.noWhatsapp} số không có WhatsApp` : ""}.
+              </span>
+            </div>
+          )}
+
+          {/* Bảng sản phẩm — chỉ tên sản phẩm + ngày tạo */}
+          <div
+            style={sx(
+              "font-size:13px; font-weight:600; color:#3C4A40; margin-top:16px; margin-bottom:6px",
+            )}
+          >
+            Bảng sản phẩm
+          </div>
+          <div
+            style={sx(
+              "border:1px solid #E9EEE9; border-radius:12px; overflow:auto",
+            )}
+          >
+            <table
+              style={sx(
+                "width:100%; border-collapse:collapse; font-size:12.5px; min-width:320px",
+              )}
+            >
+              <thead>
+                <tr style={sx("background:#EAF3EC; color:#1F7440")}>
+                  <th
+                    style={sx(
+                      "text-align:center; padding:7px 8px; font-weight:700; width:34px",
+                    )}
+                  >
+                    #
+                  </th>
+                  <th
+                    style={sx(
+                      "text-align:left; padding:7px 8px; font-weight:700",
+                    )}
+                  >
+                    Tên sản phẩm
+                  </th>
+                  <th
+                    style={sx(
+                      "text-align:right; padding:7px 8px; font-weight:700",
+                    )}
+                  >
+                    Ngày tạo
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={sx("border-top:1px solid #EEF2EE; background:#fff")}>
+                  <td
+                    style={sx(
+                      "text-align:center; padding:6px 8px; color:#8B9A90",
+                    )}
+                  >
+                    1
+                  </td>
+                  <td style={sx("padding:6px 8px; color:#14261A")}>
+                    {preview.template.productName || "—"}
+                  </td>
+                  <td
+                    style={sx(
+                      "text-align:right; padding:6px 8px; color:#4A5A4E",
+                    )}
+                  >
+                    {fmtDate(preview.template.createdAt)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {/* Danh sách khách nhận */}
+          <div className="flex justify-between items-center" style={sx("margin-top:16px; margin-bottom:6px")}>
+            <div
+              style={sx(
+                "font-size:13px; font-weight:600; color:#3C4A40",
+              )}
+            >
+              Khách nhận ({preview.recipients.length})
+            </div>
+            <div style={sx("display:flex; gap:10px")}>
+              <HButton
+                s={ghost}
+                onClick={() =>
+                  router.push(
+                    `/template/${preview.template.id}/khach-hang?returnTo=${encodeURIComponent("/gui-bao-gia")}`,
+                  )
+                }
+              >
+                + Thêm khách hàng
+              </HButton>
+              <HButton s={`${green} flex:1`} onClick={goReply}>
+                Tiếp tục → chọn template reply
+              </HButton>
+            </div>
+          </div>
+          <div
+            style={sx(
+              "display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto",
+            )}
+          >
+            {preview.recipients.slice(0, RECIPIENT_RENDER_LIMIT).map((r) => (
+              <div
+                key={r.id}
+                style={sx(
+                  "display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid #F0F3F0; border-radius:10px",
+                )}
+              >
+                <span
+                  style={sx(
+                    "width:30px; height:30px; border-radius:50%; background:#EAF3EC; color:#1F7440; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0",
+                  )}
+                >
+                  {r.name
+                    .trim()
+                    .split(/\s+/)
+                    .slice(-2)
+                    .map((x) => x[0])
+                    .join("")
+                    .toUpperCase()}
+                </span>
+                <span
+                  style={sx(
+                    "font-size:13.5px; font-weight:600; color:#14261A; flex:1",
+                  )}
+                >
+                  {r.name}
+                </span>
+                <span style={sx("font-size:12.5px; color:#8B9A90")}>
+                  {r.phone || "(thiếu SĐT)"}
+                </span>
+              </div>
+            ))}
+            {preview.recipients.length > RECIPIENT_RENDER_LIMIT && (
+              <div style={sx("padding:8px 12px; font-size:12.5px; color:#8B9A90; text-align:center")}>
+                … và {(preview.recipients.length - RECIPIENT_RENDER_LIMIT).toLocaleString("vi-VN")} khách nữa (lệnh vẫn gửi đủ{" "}
+                {preview.recipients.length.toLocaleString("vi-VN")} khách)
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* Bước 4: điền ảnh & gửi */}
+      {step === 4 && selTpl && preview && (
+        <div style={sx(card)}>
+          <div
+            style={sx(
+              "display:flex; align-items:center; gap:8px; margin-bottom:6px",
+            )}
+          >
+            <div
+              style={sx(
+                "font-size:15px; font-weight:700; color:#14261A; flex:1",
+              )}
+            >
+              Ảnh gửi kèm — {selTpl.name}
+            </div>
+            <HButton s={ghost} onClick={() => setStep(3)}>
+              ‹ Chọn lại template reply
+            </HButton>
+          </div>
+          <div
+            style={sx("font-size:12.5px; color:#8B9A90; margin-bottom:14px")}
+          >
+            Ảnh này gửi vào <b>header</b> của template WhatsApp (giống bot). Bắt
+            buộc phải điền ảnh, hoặc tick “Bỏ qua ảnh” nếu template gửi text.
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            style={sx("display:none")}
+            onChange={(e) => uploadImage(e.target.files?.[0])}
+          />
+          {hasImage !== false ? (
+            <>
+              <img
+                src={`/api/templates/${selTpl.id}/image?t=${imgKey}`}
+                alt="Ảnh header"
+                onLoad={() => setHasImage(true)}
+                onError={() => setHasImage(false)}
+                style={sx(
+                  `width:100%; max-height:320px; object-fit:contain; border:1px solid #E9EEE9; border-radius:12px; display:${hasImage ? "block" : "none"}; background:#FAFCFA`,
+                )}
+              />
+              {hasImage === null && (
+                <div
+                  style={sx(
+                    "font-size:13px; color:#8B9A90; padding:20px; text-align:center",
+                  )}
+                >
+                  Đang kiểm tra ảnh...
+                </div>
+              )}
+              {hasImage && (
+                <HButton
+                  s={`${ghost} margin-top:12px; width:100%`}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {uploading ? "Đang tải..." : "Thay ảnh khác"}
+                </HButton>
+              )}
+            </>
+          ) : (
+            <div
+              onClick={() => fileRef.current?.click()}
+              style={sx(
+                "border:2px dashed #D5DED6; border-radius:13px; padding:30px 15px; text-align:center; cursor:pointer; background:#FAFCFA",
+              )}
+            >
+              <div style={sx("font-size:32px; margin-bottom:6px")}>🖼️</div>
+              <div style={sx("font-size:14px; font-weight:600; color:#3C4A40")}>
+                {uploading ? "Đang tải..." : "Bấm để tải ảnh báo giá lên"}
+              </div>
+              <div style={sx("font-size:12px; color:#8B9A90; margin-top:3px")}>
+                PNG/JPG, tối đa 5MB
+              </div>
+            </div>
+          )}
+
+          {/* Chưa có ảnh -> phải tick bỏ qua mới cho gửi */}
+          {hasImage === false && (
+            <label
+              style={sx(
+                "display:flex; align-items:center; gap:9px; margin-top:14px; cursor:pointer; font-size:13.5px; color:#3C4A40",
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={skipImage}
+                onChange={(e) => setSkipImage(e.target.checked)}
+                style={sx("cursor:pointer; width:16px; height:16px")}
+              />
+              Bỏ qua ảnh — gửi không kèm ảnh (template gửi text)
+            </label>
+          )}
+
+          {(() => {
+            const canSend = hasImage === true || skipImage;
+            const blocked = busy || uploading || !canSend;
+            return (
+              <div style={sx("margin-top:20px")}>
+                <HButton
+                  s={`${green} width:100%; height:48px; opacity:${blocked ? ".5" : "1"}; pointer-events:${blocked ? "none" : "auto"}`}
+                  onClick={doConfirm}
+                >
+                  {busy
+                    ? "Đang gửi..."
+                    : `Gửi cho ${preview.recipients.length} khách`}
+                </HButton>
+                {!canSend && !busy && !uploading && (
+                  <div
+                    style={sx(
+                      "font-size:12px; color:#B07208; margin-top:8px; text-align:center",
+                    )}
+                  >
+                    Cần điền ảnh, hoặc tick “Bỏ qua ảnh” để được gửi.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}

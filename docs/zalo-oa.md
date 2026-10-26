@@ -1,246 +1,110 @@
-# Kết nối Zalo OA cho app báo giá — từng bước và vì sao
+# Kết nối Zalo OA — từng bước và vì sao
 
-Bản cho app Next.js này, chuyển từ quy trình đã làm với worker Go (`zalo-deploy.md`).
-Khác biệt lớn nhất: **các bước 3 → 7 (PKCE, đổi code, bootstrap .env) đã được tự động hoá
-trong màn "Zalo OA"** của app — không còn phải chạy `openssl`/`curl` tay.
+App dùng Zalo OA để (a) **báo người phụ trách** khi khách trả lời báo giá (màn "Kênh nhận", loại ZALO) và (b) **nhận tin** người dùng nhắn OA qua webhook (màn "Phản hồi"). Cả hai cần `access_token` hợp lệ; token Zalo chỉ sống 1–25 giờ nên **backend** tự làm mới.
 
-Bối cảnh: app dùng Zalo OA để (a) **báo sếp** khi khách trả lời báo giá (màn "Kênh nhận",
-loại ZALO) và (b) **nhận tin** người dùng nhắn OA qua webhook (màn "Phản hồi"). Cả hai cần
-`access_token` hợp lệ; token Zalo chỉ sống 1–25 giờ nên app có cơ chế **tự làm mới**
-(`src/server/services/zaloTokenService.ts`), mirror `token_refresher.go` của worker.
-
----
+> Phân vai: **mọi logic Zalo (PKCE, đổi code, làm mới token, webhook, gửi tin) nằm ở backend NestJS** (`baogia_be`, module `zalo`, `webhooks`, `cron`). Biến môi trường Zalo (`ZALO_*`, `APP_BASE_URL`) đặt ở **backend**, không đặt ở FE. FE chỉ có màn **Zalo OA** (`/zalo-oa`) để bấm kết nối và xem trạng thái; mọi lời gọi `/api/zalo/*`, `/api/webhooks/zalo` đi qua proxy FE tới backend.
 
 ## Sơ đồ tổng quan
 
-```
-Bước 1: Tạo app trên developers.zalo.me, gắn với OA → ZALO_APP_ID + ZALO_SECRET_KEY (.env)
-Bước 2: Xin quyền "Gửi tin nhắn text"                    → Zalo duyệt
+```text
+Bước 1: Tạo app trên developers.zalo.me, gắn OA   → ZALO_APP_ID + ZALO_SECRET_KEY (env backend)
+Bước 2: Xin quyền "Gửi tin nhắn text"             → Zalo duyệt
 Bước 3: Khai Callback URL trên Zalo = URL màn "Zalo OA" hiển thị (1 lần)
 Bước 4: Màn "Zalo OA" → "Kết nối Zalo OA" → "Mở trang cấp quyền" → admin OA bấm Đồng ý
-Bước 5: Zalo tự quay về /api/zalo/oauth/callback → app đổi code lấy token → ghi zalo_oa_tokens
-Bước 6: Từ đây app tự làm mới token mãi mãi (job 5 phút + lúc gửi tin + /api/cron/zalo-token)
-Bước 7: Webhook: xác thực domain + khai URL + ZALO_WEBHOOK_SECRET
+Bước 5: Zalo quay về /api/zalo/oauth/callback → backend đổi code lấy token → lưu DB
+Bước 6: Backend tự làm mới token (job nền + lúc gửi tin + /api/cron/zalo-token)
+Bước 7: Kích hoạt người nhận bằng mã 6 số
+Bước 8: Xác thực domain + Webhook (Zalo gọi vào)
 ```
 
----
+## Điều kiện triển khai (quan trọng)
 
-## Bước 0 — DÙNG CHUNG với worker Go (khuyên dùng khi worker Go đã chạy Zalo)
-
-Worker Go đã cấp quyền một lần (Bước 1–7 của `zalo-deploy.md`) và đang giữ token trong bảng
-`zalo_oa_tokens` của **DB Go**, tự làm mới mỗi 5 phút. Web này có DB riêng nên **không tự có
-token** — nhưng thay vì cấp quyền lại (rủi ro giẫm chuỗi refresh_token của Go), cho web này
-**đọc thẳng** token của Go:
-
-```env
-ZALO_TOKEN_SOURCE_DB_URL="postgresql://...connection string DB worker Go..."   # chỉ cần SELECT
-ZALO_WEBHOOK_FORWARD_URL="https://ago-order-api.onrender.com/webhooks/zalo"   # xem dưới
-```
-
-- Có `ZALO_TOKEN_SOURCE_DB_URL` → web này **bỏ qua hoàn toàn** cấp quyền/làm mới; mỗi lần gửi tin
-  đọc `access_token` mới nhất từ `zalo_oa_tokens` bên Go (cache 5 phút; Zalo báo `-216` thì đọc lại
-  ngay vì Go vừa xoay token). `src/server/lib/zaloSharedToken.ts`.
-- Màn **Zalo OA** hiện badge *Dùng chung token với worker Go*, ẩn nút Kết nối, và liệt kê
-  **người đã liên kết Zalo bên Go** (`zalo_user_bindings`) → bấm **+ Thêm làm kênh nhận** là
-  phản hồi khách bay về Zalo người đó — không cần webhook, không cần mã 6 số.
-- **Webhook**: 1 app Zalo chỉ có 1 URL, hiện đang trỏ về Go. Chỉ khi cần luồng mã 6 số / nhận tin
-  Zalo ở web này thì đổi URL webhook sang web này và đặt `ZALO_WEBHOOK_FORWARD_URL` = URL webhook
-  của Go: web này chuyển tiếp **nguyên văn** (raw body + `X-ZEvent-Signature`) nên Go verify và xử
-  lý y như cũ (cùng app → cùng webhook secret).
-- Render Postgres cần `?sslmode=require`; DB Go trong docker đóng cổng thì không dùng được cách này.
-- Muốn tách riêng sau này: bỏ `ZALO_TOKEN_SOURCE_DB_URL` → làm Bước 1–5 bên dưới.
-
----
+- Backend phải với tới được từ Internet qua cùng domain Zalo gọi: **Callback URL** (`/api/zalo/oauth/callback`) và **Webhook URL** (`/api/webhooks/zalo`) phải đến được backend — qua proxy của FE (giữ domain FE) hoặc trực tiếp domain backend.
+- Đặt `APP_BASE_URL` (env **backend**) = domain công khai của FE, để sau khi cấp quyền, backend redirect về `/zalo-oa` của FE. Nếu URL suy ra sai (sau proxy lạ) khai tay `ZALO_OAUTH_CALLBACK_URL`.
+- Chỉ chạy **một** instance làm mới token / worker (ở backend), tránh dùng `refresh_token` song song.
 
 ## Bước 1 — Tạo ứng dụng, lấy App ID + Secret Key
 
-Vào [developers.zalo.me](https://developers.zalo.me), đăng nhập bằng tài khoản **admin của OA**.
-Tạo app loại **Official Account API**, gắn với đúng OA. **Cài đặt** → lấy **App ID** và
-**Secret Key**. Điền vào `.env` (local) / Environment (Render):
+[developers.zalo.me](https://developers.zalo.me), đăng nhập **admin của OA**. Tạo app loại **Official Account API**, gắn đúng OA. **Cài đặt** → lấy **App ID**, **Secret Key**. Điền vào env backend:
 
 ```env
 ZALO_APP_ID=<App ID>
 ZALO_SECRET_KEY=<Secret Key>
 ```
 
-**Vì sao:** cặp này là "danh tính" của app khi gọi Zalo — mọi lệnh lấy/làm mới token đều
-phải chứng minh "tôi là app này". Khởi động lại app sau khi điền.
-
----
+Vì sao: cặp này là "danh tính" của app khi lấy/làm mới token. Khởi động lại backend sau khi điền.
 
 ## Bước 2 — Xin quyền "Gửi tin nhắn text"
 
-**API và Cấp quyền** → **Official Account API** → **Gửi tin nhắn** → bật **"Gửi tin nhắn
-text"**. Chờ trạng thái **"Đã được duyệt"** (tự động hoặc 1–3 ngày).
-
-**Vì sao:** app gọi `POST /v3.0/oa/message/cs` (`src/server/lib/zalo.ts`) — đúng quyền này.
-Thiếu quyền thì token vẫn cấp được nhưng gửi tin bị từ chối (lỗi nghiệp vụ, không retry).
-Đừng xin thừa quyền — duyệt lâu hơn vô ích.
-
----
+**API và Cấp quyền** → **Official Account API** → **Gửi tin nhắn** → bật **"Gửi tin nhắn text"**, chờ **"Đã được duyệt"**. Thiếu quyền thì token vẫn cấp được nhưng gửi tin bị từ chối. Đừng xin thừa quyền.
 
 ## Bước 3 — Khai Callback URL (1 lần)
 
-Mở app → menu **Zalo OA** (admin) → mục **Cấu hình** có sẵn **Callback URL**, dạng
-`https://<domain-app>/api/zalo/oauth/callback`. Sao chép, dán vào developers.zalo.me →
-app → **Official Account** → **Đường dẫn yêu cầu cấp quyền** → ô **Official Account
-Callback Url** → **Cập nhật**.
+Mở app → menu **Zalo OA** (admin) → mục **Cấu hình** có sẵn **Callback URL** dạng `https://<domain>/api/zalo/oauth/callback`. Dán vào developers.zalo.me → app → **Official Account** → **Đường dẫn yêu cầu cấp quyền** → **Official Account Callback Url** → **Cập nhật**.
 
-Ô **Code Challenge** / **State** trên trang Zalo **không cần điền** — app tự sinh cặp PKCE
-và nhúng sẵn vào link cấp quyền ở bước 4.
-
-**Vì sao PKCE vẫn có:** app tạo `code_verifier` (bí mật, cất trong `app_settings`) và
-`code_challenge = BASE64URL(SHA256(code_verifier))`; Zalo ghi nhớ challenge khi admin
-đồng ý; lúc đổi `code` lấy token app gửi kèm `code_verifier`, Zalo tự hash và so — ai
-nhặt được `code` mà không có verifier thì vô dụng. (Bẫy `\r` của `openssl` trên Git Bash
-không còn vì tính bằng Node.)
-
-Nếu deploy sau proxy lạ và URL suy ra sai, khai tay `ZALO_OAUTH_CALLBACK_URL` hoặc
-`APP_BASE_URL` trong env.
-
----
+Ô **Code Challenge** / **State** **không cần điền**: backend tự sinh cặp PKCE (`code_verifier` giữ bí mật, `code_challenge = BASE64URL(SHA256(code_verifier))`) và nhúng vào link cấp quyền; lúc đổi `code` gửi kèm `code_verifier` nên `code` bị lộ cũng vô dụng.
 
 ## Bước 4 — Cấp quyền
 
-Màn **Zalo OA** → **Kết nối Zalo OA** → hiện khung 2 bước → **Mở trang cấp quyền Zalo**
-(tab mới). Đăng nhập đúng tài khoản **admin của OA**, bấm **Đồng ý**.
+Màn **Zalo OA** → **Kết nối Zalo OA** → **Mở trang cấp quyền Zalo** (tab mới). Đăng nhập đúng **admin của OA**, bấm **Đồng ý**. Zalo chuyển hướng về `/api/zalo/oauth/callback?oa_id=…&code=…&state=…`; backend đổi code lấy token ngay (code dùng 1 lần, sống vài phút), lưu DB, rồi đưa về màn Zalo OA với thông báo "Đã kết nối".
 
-Zalo chuyển hướng về `/api/zalo/oauth/callback?oa_id=…&code=…&state=…`. App **đổi code
-lấy token ngay** (code dùng 1 lần, sống vài phút), ghi vào bảng `zalo_oa_tokens`, ghi nhớ
-`oa_id`, rồi đưa bạn về màn Zalo OA với thông báo "Đã kết nối".
+**Chạy local / callback không trỏ về app được:** mở mục *"Đổi code bằng tay"*, copy `code` + `oa_id` trên thanh địa chỉ dán vào → **Đổi code lấy token** (`POST /api/zalo/oauth/exchange`, vẫn dùng đúng verifier đã cất).
 
-**Chạy local / callback không trỏ về app được:** mở mục *"Đổi code bằng tay"* trong khung
-đó, copy `code` + `oa_id` trên thanh địa chỉ dán vào → **Đổi code lấy token**. Vẫn dùng
-đúng verifier đã cất nên PKCE không bị bỏ qua.
+## Bước 5 — Tự vận hành
 
----
+Backend giữ logic làm mới token:
 
-## Bước 5 — Từ đây tự vận hành
+- Trước khi gửi tin: nếu `expires_at` còn **< 10 phút** (hoặc đã hết) → đổi `refresh_token` lấy cặp mới, ghi đè DB, dùng ngay.
+- Job nền mỗi **5 phút** làm tương tự; kiểu kéo: `GET/POST /api/cron/zalo-token` (pinger gọi `/api/cron/process-sends` mỗi phút cũng kiểm tra tiện thể).
+- Zalo báo `-216` (token hỏng) giữa chừng → ép làm mới 1 lần rồi gửi lại. Nhiều request cùng lúc chỉ 1 luồng gọi Zalo.
+- `expires_in` Zalo trả về được tin nguyên (thực tế 90000 giây = 25 giờ).
 
-`zaloTokenService` giữ đúng logic worker Go:
+Kiểm tra: màn Zalo OA hiện *Access token hết hạn lúc… (còn N phút)*, *Làm mới lần cuối*; nút **Làm mới token ngay** để thử; **Gửi thử** để kiểm tra token + quyền.
 
-- Trước khi gửi tin: đọc `expires_at` trong DB, còn **< 10 phút** (hoặc đã hết) → gọi Zalo
-  đổi `refresh_token` lấy cặp mới, ghi đè DB, dùng ngay.
-- Job nền mỗi **5 phút** (`src/instrumentation.ts`) làm y hệt → token không bao giờ có
-  cơ hội hết hạn thật khi server đang chạy.
-- Kiểu kéo: `/api/cron/process-sends` (pinger đã gọi mỗi phút) tiện thể kiểm luôn (tự giới
-  hạn 1 lần đọc DB / 5 phút); hoặc gọi riêng `GET /api/cron/zalo-token`.
-- Zalo báo `-216` (token hỏng) giữa chừng → ép làm mới 1 lần rồi gửi lại.
-- Nhiều request cùng lúc chỉ 1 luồng gọi Zalo (refresh_token dùng 1 lần — gọi song song
-  là luồng sau dùng token đã bị vô hiệu).
+**Bootstrap từ env** (chỉ khi đã lấy token tay): đặt `ZALO_OA_REFRESH_TOKEN=<refresh_token>` ở backend; lần đầu chưa có dòng token trong DB thì backend tạo dòng đã hết hạn để lượt làm mới đầu chạy ngay. Sau đó **xoá biến này** vì Zalo đã vô hiệu refresh_token đó.
 
-`expires_in` Zalo trả về (thực tế `90000` giây = 25 giờ) được tin nguyên — không hard-code.
+**Khi nào làm lại từ Bước 4:** refresh_token trong DB cũng chết (backend tắt quá lâu, admin thu hồi quyền, đổi Secret Key quên cập nhật). Dấu hiệu: màn báo *Token hết hạn* mà **Làm mới token ngay** lỗi; nhật ký lặp `ZALO_LAM_MOI_TOKEN FAILED`. Xử lý: **Kết nối lại**.
 
-**Kiểm tra:** màn Zalo OA hiện *Access token hết hạn lúc… (còn N phút)* và *Làm mới lần
-cuối*; nút **Làm mới token ngay** để thử. Log server:
+## Bước 6 — Kích hoạt Zalo cho người nhận (mã 6 số)
 
-```
-[zaloToken] đã làm mới access token Zalo OA oa_id=... expires_at=...
-[zaloToken] job làm mới token Zalo OA chạy mỗi 5 phút
-```
+Zalo chỉ cho OA nhắn người **đã tương tác** với OA và cần `user_id` theo OA (không phải SĐT):
 
-### Bootstrap từ `.env` (chỉ khi đã lấy token TAY bằng curl)
+1. Trong app bấm **Ⓩ Kích hoạt Zalo** (dưới tên mình ở sidebar), hoặc admin vào **Người dùng** → cột **Zalo** → **Kích hoạt** → **Lấy mã kích hoạt**.
+2. Backend cấp **mã 6 số**, sống 10 phút (`POST /api/users/:id/zalo/link-code`).
+3. Người đó nhắn đúng mã cho OA trên Zalo cá nhân (chưa chat thì bấm Quan tâm).
+4. Webhook nhận `user_send_text` = mã → backend gắn `sender.id` với tài khoản và **tự tạo kênh nhận ZALO**, OA trả lời "Đã kích hoạt". Modal trên web tự chuyển *Đã kích hoạt* (poll 3 giây).
+5. Từ đó mọi phản hồi khách được báo về Zalo người đó. **Huỷ kích hoạt** (`DELETE /api/users/:id/zalo`) xoá liên kết + kênh nhận.
 
-Đặt `ZALO_OA_REFRESH_TOKEN=<refresh_token>` rồi chạy app. Lần đầu **chưa có dòng nào**
-trong `zalo_oa_tokens` → app tạo dòng với `expires_at = bây giờ` (coi như hết hạn) để lượt
-làm mới đầu tiên chạy ngay. Log: `đã khởi tạo token Zalo OA từ ZALO_OA_REFRESH_TOKEN`.
-Sau đó **xoá biến này** — Zalo đã vô hiệu refresh_token đó ngay lần dùng đầu, để lại chỉ
-gây nhầm.
+Cách cũ vẫn dùng được: admin thêm `user_id` ở màn *Kênh nhận* hoặc nút **+ Thêm làm kênh nhận** ở màn Zalo OA (danh sách *Người đã nhắn*).
 
-### Khi nào phải làm lại từ Bước 4
+## Bước 7 — Xác thực domain + Webhook
 
-Chỉ khi **refresh_token trong DB cũng chết**: app tắt quá lâu (vài tháng), admin OA thu hồi
-quyền, đổi Secret Key mà quên cập nhật env. Dấu hiệu: màn Zalo OA báo *Token hết hạn* mà
-**Làm mới token ngay** lỗi; log `[zaloToken] làm mới token Zalo OA thất bại`; nhật ký có
-`ZALO_LAM_MOI_TOKEN FAILED` lặp lại. Xử lý: **Kết nối lại (cấp quyền lại)**.
+Zalo gọi `POST https://<domain>/api/webhooks/zalo` khi có người nhắn/quan tâm OA. Cần **domain thật** (Zalo từ chối tunnel tạm).
 
----
+**Xác thực domain:** developers.zalo.me → **Xác thực domain** → ô **"Tiền tố URL"** → `https://<domain>` → **Xác thực**. Zalo cho tải file `zalo_verifier<mã>.html` → **đặt vào thư mục `public/` của FE** (Next.js phục vụ ở đường dẫn gốc; domain nào Zalo xác thực thì file phải được phục vụ từ chính domain đó). Đổi domain thì Zalo cấp file khác → thay file.
 
-## Bước 6 — Kích hoạt Zalo cho người nhận (mã 6 số, giống nút "Kết nối" bên worker Go)
+**Đăng ký Webhook URL:** mục **Webhook** → dán Webhook URL (màn Zalo OA hiển thị sẵn) → chọn `user_send_text` (thêm `user_send_image`, `follow` nếu muốn) → **Lưu**.
 
-Zalo chỉ cho OA nhắn người **đã tương tác** với OA, và cần `user_id` theo OA (không phải
-SĐT) — nên người nhận phải tự "đăng ký" bằng cách nhắn OA một lần:
+**Hai cái bẫy:**
 
-1. Trong app, bấm **Ⓩ Kích hoạt Zalo** (nút dưới tên mình ở sidebar — ai cũng có), hoặc admin
-   vào **Người dùng** → cột **Zalo** → **Kích hoạt** cho người khác → **Lấy mã kích hoạt**.
-2. App cấp **mã 6 số** (sống 10 phút, bảng `zalo_link_requests`).
-3. Người đó mở Zalo cá nhân, tìm OA, **nhắn đúng mã** cho OA (chưa từng chat thì bấm Quan tâm).
-4. Webhook (bước 7) nhận `user_send_text` = mã → `consumeZaloLinkCode`: gắn `sender.id` với tài
-   khoản (`zalo_user_bindings`), **tự tạo kênh nhận ZALO** (`receive_channels`, tên "Zalo — <họ tên>"),
-   xoá mã, OA trả lời "✅ Đã kích hoạt…". Modal trên web tự chuyển sang *Đã kích hoạt* (poll 3s).
-5. Từ đó `notifyInboundReply` (đã có sẵn cho WhatsApp) gửi mọi phản hồi khách về Zalo người đó.
-   **Huỷ kích hoạt** xoá binding + kênh nhận. Tin của nhân viên đã kích hoạt nhắn OA không bị
-   coi là phản hồi khách.
+- Secret ký webhook **khác** Secret Key app: trang Webhook có ô **"Secret Key"** riêng → đặt vào `ZALO_WEBHOOK_SECRET` (env backend). Nhầm với `ZALO_SECRET_KEY` thì mọi webhook bị coi sai chữ ký, không lỗi rõ. Bỏ trống = không kiểm chữ ký (chỉ dùng khi dev).
+- Header `X-ZEvent-Signature` có tiền tố `mac=` (backend cắt trước khi so). Công thức: `SHA256(app_id + raw_body + timestamp + webhook_secret)` — tính trên **byte gốc**, nên proxy FE không được sửa body.
 
-Cách cũ (admin tự thêm `user_id` ở màn *Kênh nhận* / nút **+ Thêm làm kênh nhận** ở màn Zalo OA)
-vẫn dùng được. Nút **Gửi thử** ở màn Zalo OA để kiểm tra token + quyền.
+**Webhook luôn trả 200:** lúc bấm Lưu Zalo gửi request thử không kèm chữ ký hợp lệ; trả 401/403 là Zalo không lưu. Backend trả 200 cho mọi trường hợp; chữ ký sai thì không xử lý gì, chỉ ghi log.
 
-Code: `src/server/services/zaloLinkService.ts`, `src/features/zalo/ZaloActivateModal.tsx`,
-`GET/DELETE /api/users/{id}/zalo`, `POST /api/users/{id}/zalo/link-code`.
+**Kiểm tra:** nhắn 1 tin vào OA → màn **Phản hồi** hiện dòng kênh *Zalo*; màn **Zalo OA** mục *Người đã nhắn* hiện người đó; nếu người đó là kênh nhận thì nhận được tin báo.
 
----
+## Tùy chọn — dùng chung token với hệ thống cũ (worker Go)
 
-## Bước 7 — Xác thực domain + Webhook (Zalo gọi vào)
-
-Chiều ngược lại: Zalo gọi `POST https://<domain-app>/api/webhooks/zalo` khi có người nhắn
-/ quan tâm OA. Cần **domain thật** (Zalo từ chối tunnel tạm).
-
-### 7.1 Xác thực domain
-
-developers.zalo.me → app → **Xác thực domain** → ô **"Tiền tố URL"** (không phải ô
-Domain cần DNS TXT) → điền `https://<domain-app>` → **Xác thực**. Zalo cho tải file
-`zalo_verifier<mã>.html` → **bỏ nguyên file vào thư mục `public/`** của app → commit +
-deploy. Next.js phục vụ file tĩnh trong `public/` ở đúng đường dẫn gốc, không cần route
-riêng. Đổi domain / xác thực lại → Zalo cấp file khác → thay file.
-
-### 7.2 Đăng ký Webhook URL
-
-Mục **Webhook** → dán **Webhook URL** (màn Zalo OA hiển thị sẵn) → chọn sự kiện
-`user_send_text` (thêm `user_send_image`, `follow`… nếu muốn) → **Lưu**. Zalo cảnh báo IP
-server không ở Việt Nam thì cứ đồng ý — các trường cần dùng không bị rút gọn.
-
-### 7.3 Hai cái bẫy (đã gặp thật)
-
-**(a) Secret ký webhook KHÁC Secret Key app.** Trang Webhook có ô **"Secret Key"** riêng →
-đặt vào `ZALO_WEBHOOK_SECRET`. Nhầm với `ZALO_SECRET_KEY` = mọi webhook bị coi là sai chữ
-ký, không lỗi rõ, chỉ thấy "im lặng". Log server khi sai: `[zaloWebhook] chữ ký không hợp
-lệ`. (Bỏ trống `ZALO_WEBHOOK_SECRET` = không kiểm chữ ký — chỉ dùng khi dev.)
-
-**(b) Header `X-ZEvent-Signature` có tiền tố `mac=`** → app cắt trước khi so
-(`verifyZaloSignature` trong `src/server/lib/zalo.ts`). Công thức:
-`SHA256(app_id + raw_body + timestamp + webhook_secret)`.
-
-### 7.4 Webhook LUÔN trả 200
-
-Lúc bấm Lưu, Zalo gửi request thử **không kèm chữ ký hợp lệ**. Trả 401/403 là Zalo báo
-*"Webhook chỉ được thiết lập khi trả về HTTP code 200 OK"* và không lưu. Handler
-`src/app/api/webhooks/zalo/route.ts` trả 200 cho **mọi** trường hợp — chữ ký sai thì
-**không xử lý gì** (không lưu tin, không báo sếp), chỉ log. An toàn giữ nguyên, chỉ tầng
-HTTP không báo lỗi ra ngoài.
-
-### 7.5 Kiểm tra toàn luồng
-
-1. Nhắn 1 tin vào OA từ Zalo cá nhân.
-2. Màn **Phản hồi** hiện dòng kênh *Zalo*, tên hiển thị + `user_id`; màn **Zalo OA** mục
-   *Người đã nhắn* hiện người đó.
-3. Nếu người đó đã là kênh nhận → sếp nhận được tin báo (nội dung 4 dòng như WhatsApp).
-
----
+Backend hỗ trợ đọc token Zalo của hệ thống cũ thay vì tự cấp quyền: đặt `ZALO_TOKEN_SOURCE_DB_URL` (chỉ cần quyền SELECT) và, nếu cần chuyển tiếp webhook, `ZALO_WEBHOOK_FORWARD_URL` (chuyển nguyên văn raw body + `X-ZEvent-Signature`). Có `ZALO_TOKEN_SOURCE_DB_URL` thì bỏ qua cấp quyền/làm mới; màn Zalo OA hiện badge *Dùng chung token* và liệt kê người đã liên kết bên hệ thống cũ. Chi tiết xem tài liệu backend.
 
 ## Tham chiếu nhanh
 
 | Thứ | Ở đâu |
 |---|---|
-| Token + PKCE + làm mới | `src/server/services/zaloTokenService.ts` |
-| Gửi tin OA, verify chữ ký | `src/server/lib/zalo.ts` |
-| Webhook | `src/app/api/webhooks/zalo/route.ts` |
-| OAuth start / callback / đổi code tay | `src/app/api/zalo/oauth/{start,callback,exchange}` |
-| Trạng thái / làm mới / gửi thử / ngắt | `src/app/api/zalo/{status,refresh,test,disconnect}` |
-| Người đã nhắn OA | `src/app/api/zalo/senders` ← `zaloSenderService.ts` |
-| Kích hoạt Zalo (mã 6 số) | `zaloLinkService.ts`, `ZaloActivateModal.tsx`, `/api/users/{id}/zalo[/link-code]` |
-| Dùng chung token / người liên kết bên Go | `src/server/lib/zaloSharedToken.ts`, `GET /api/zalo/shared-users` |
-| Chuyển tiếp webhook sang Go | `forwardZaloWebhook` trong `src/server/lib/zalo.ts` (`ZALO_WEBHOOK_FORWARD_URL`) |
-| Cron kéo | `GET /api/cron/zalo-token` (và `/api/cron/process-sends` tiện thể) |
-| Màn hình | `src/features/zalo/ZaloScreen.tsx` → `/zalo-oa` |
-| Bảng | `zalo_oa_tokens` (token), `zalo_user_bindings` + `zalo_link_requests` (kích hoạt), `app_settings` (`zalo_oa_id`, `zalo_pkce_*`) |
-| SQL tạo bảng (Supabase SQL Editor) | cuối `prisma/schema.sql` |
+| Màn hình | FE: `src/features/zalo/components/zalo-screen.tsx` → `/zalo-oa`; modal `zalo-activate-modal.tsx` |
+| Endpoint Zalo | BE `zalo.controller.ts`: `/api/zalo/{status,check,disconnect,refresh,test,senders,shared-users}`, `/oauth/{start,exchange,callback}` |
+| Webhook | BE `webhooks.controller.ts`: `/api/webhooks/zalo` |
+| Kích hoạt | BE `users.controller.ts`: `/api/users/:id/zalo`, `/zalo/link-code` |
+| Cron | BE `cron.controller.ts`: `/api/cron/zalo-token` |
+| Env | `ZALO_APP_ID`, `ZALO_SECRET_KEY`, `ZALO_WEBHOOK_SECRET`, `APP_BASE_URL`, `ZALO_OAUTH_CALLBACK_URL` (tuỳ chọn) — đều ở backend |

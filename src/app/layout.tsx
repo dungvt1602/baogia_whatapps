@@ -3,8 +3,8 @@ import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/auth";
-import RegisterSW from "@/components/common/RegisterSW";
-import ActorHeaders from "@/components/common/ActorHeaders";
+import RegisterSW from "@/components/shared/register-sw";
+import ActorHeaders from "@/components/shared/actor-headers";
 
 const beVietnam = Be_Vietnam_Pro({
   variable: "--font-be-vietnam",

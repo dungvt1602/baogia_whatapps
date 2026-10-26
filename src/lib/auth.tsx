@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useSyncExternalStore } from "react";
+import { apiUrl } from "./api";
 
 export type Session = {
   id?: string;
@@ -93,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const id = (identifier || "").trim();
     if (!id) return { ok: false, error: "Vui lòng nhập tài khoản." };
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(apiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ identifier: id, password: password ?? "" }),

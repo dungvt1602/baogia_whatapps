@@ -1,0 +1,49 @@
+# CI cho Ago Báo giá (frontend)
+# Chạy khi push / mở PR vào main, dev: cài deps → lint → unit test → build (type check).
+# Build KHÔNG cần backend chạy: mọi lời gọi /api/* chỉ xảy ra lúc runtime.
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+# Push mới vào cùng nhánh/PR thì huỷ lượt chạy cũ đang dở
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Test đỏ thì dừng, không build
+      - name: Unit test
+        run: npm run test
+
+      - name: Build (type check + production build)
+        run: npm run build
+        env:
+          # Giá trị giả cho CI — runtime thật đọc từ env khi deploy
+          BACKEND_URL: http://localhost:4000
+          NEXT_PUBLIC_API_URL: ""
