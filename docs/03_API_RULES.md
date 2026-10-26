@@ -11,7 +11,7 @@ Hợp đồng đầy đủ do backend giữ: `baogia_be/docs/06_FE_CONTRACT.md`.
 
 ## RFQ qua Zalo: người nhận
 - `POST /api/supplier-rfqs/:id/send`: NCC gửi được khi có `zaloUserId` HOẶC `phone`; BE tra SĐT -> user_id. Lỗi tra (vd. "SĐT … chưa Quan tâm OA …") nằm ở `results[].error`; `ok` + `error` = bỏ qua.
-- `POST /api/supplier-rfqs/:id/test-send`: `zaloUserId` nhận user_id hoặc SĐT (≤ 50 ký tự); phản hồi có thể kèm `resolvedUserId`. Lỗi Zalo/tra vẫn HTTP 200 với `ok:false` + `error`.
+- `POST /api/supplier-rfqs/:id/test-send`: `zaloUserId` nhận user_id hoặc SĐT (≤ 50 ký tự); phản hồi `{ok, mode:"buttons"|"text", link, error?, buttonError?, imageSent, imageError?, resolvedUserId?, zalo?}` (tin ảnh tuỳ chọn gửi trước, rồi tin chữ kèm nút "Nhập giá", dự phòng chữ + link). Lỗi Zalo/tra vẫn HTTP 200 với `ok:false` + `error`.
 
 ## Error envelope
 

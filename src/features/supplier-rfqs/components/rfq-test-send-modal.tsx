@@ -16,10 +16,20 @@ import type { TestRecipient, TestSendResponse } from "@/features/supplier-rfqs/t
  */
 export type TestOutcome = { kind: "result"; data: TestSendResponse } | { kind: "error"; message: string };
 
-const MODE_HELP: Record<string, string> = {
-  list: "Tin dạng danh sách (có ảnh + nút mở form)",
-  text: "Tin văn bản thường kèm link",
-};
+// Tin RFQ = (tuỳ chọn) 1 tin ẢNH gửi trước, rồi tin CHỮ kèm nút "Nhập giá"; Zalo từ chối nút thì BE rơi về chữ + link.
+export function modeLabel(mode: string): string {
+  if (mode === "buttons") return "Tin chữ kèm nút bấm «Nhập giá»";
+  if (mode === "text") return "Tin chữ kèm link (dự phòng — Zalo từ chối nút)";
+  return `Kiểu tin khác: ${mode}`; // mode lạ: nhãn trung tính, không để sập
+}
+
+// null = không có thông tin ảnh để hiện (BE cũ không trả imageSent).
+export function imageStatus(d: { imageSent?: boolean; imageError?: string }): { text: string; ok: boolean } | null {
+  if (d.imageError) return { text: `Không gửi được ảnh: ${d.imageError}`, ok: false };
+  if (d.imageSent === true) return { text: "Đã gửi ảnh", ok: true };
+  if (d.imageSent === false) return { text: "RFQ chưa có ảnh", ok: true };
+  return null;
+}
 
 export function formatRaw(v: unknown): string {
   if (v == null) return "(không có)";
@@ -73,13 +83,20 @@ export function TestSendResultView({ outcome }: { outcome: TestOutcome }) {
           SĐT đã tra ra Zalo user_id: <b className="font-mono">{data.resolvedUserId}</b>
         </div>
       )}
-      {data?.listError && (
-        <div className="mt-1 text-[13px] text-[#B3261E]">Định dạng list bị Zalo từ chối: {data.listError}</div>
+      {data?.buttonError && (
+        <div className="mt-1 text-[13px] text-[#B3261E]">
+          Nút bấm bị Zalo từ chối: {data.buttonError}
+          <div className="mt-0.5 text-[12px] text-[#7A4A00]">Gợi ý: Zalo có thể chỉ nhận link thuộc tên miền đã xác minh trong cài đặt OA (cần dùng tên miền riêng đã xác minh).</div>
+        </div>
       )}
       {data?.mode && (
         <div className="mt-2 text-[13px] text-[#33413A]">
-          Kiểu tin đã dùng (mode): <b>{data.mode}</b>
-          {MODE_HELP[data.mode] ? ` — ${MODE_HELP[data.mode]}` : ""}
+          Kiểu tin đã dùng (mode <b>{data.mode}</b>): {modeLabel(data.mode)}
+        </div>
+      )}
+      {data && imageStatus(data) && (
+        <div className={`mt-1 text-[13px] ${imageStatus(data)?.ok ? "text-[#33413A]" : "text-[#B3261E]"}`} data-testid="image-status">
+          Ảnh: {imageStatus(data)?.text}
         </div>
       )}
       {data?.link && (
@@ -144,12 +161,12 @@ export default function RfqTestSendModal({ rfqId, onClose }: { rfqId: string; on
       const data = await postJSON<TestSendResponse>(`/api/supplier-rfqs/${rfqId}/test-send`, { zaloUserId });
       setOutcome({ kind: "result", data });
     } catch (e) {
-      // Lỗi HTTP 4xx/5xx từ BE vẫn có thể mang `zalo`/`listError`/`mode`/`link` trong body -> giữ lại để chẩn đoán.
+      // Lỗi HTTP 4xx/5xx từ BE vẫn có thể mang `zalo`/`buttonError`/`mode`/`link`/`imageSent` trong body -> giữ lại để chẩn đoán.
       if (e instanceof ApiError && Object.keys(e.body).length > 0) {
         const b = e.body as Partial<TestSendResponse>;
         setOutcome({
           kind: "result",
-          data: { ok: false, mode: b.mode, link: b.link, error: e.message, listError: b.listError, zalo: b.zalo },
+          data: { ok: false, mode: b.mode, link: b.link, error: e.message, buttonError: b.buttonError, imageSent: b.imageSent, imageError: b.imageError, resolvedUserId: b.resolvedUserId, zalo: b.zalo },
         });
       } else {
         setOutcome({ kind: "error", message: apiErrorMessage(e, "Không gửi thử được") });

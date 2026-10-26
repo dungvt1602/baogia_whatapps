@@ -77,10 +77,13 @@ export type SendResponse = { results: SendResult[] };
 export type TestRecipient = { userId: string; name: string; zaloUserId: string };
 export type TestSendResponse = {
   ok: boolean;
-  mode?: "list" | "text";
+  // Mode lạ (BE thêm sau này) vẫn phải hiển thị được -> chấp nhận chuỗi bất kỳ.
+  mode?: "buttons" | "text" | (string & {});
   link?: string;
   error?: string;
-  listError?: string;
+  buttonError?: string; // Zalo từ chối tin có nút -> BE rơi về text
+  imageSent?: boolean;
+  imageError?: string;
   resolvedUserId?: string; // có khi BE tra SĐT -> Zalo user_id
   zalo?: unknown;
 };

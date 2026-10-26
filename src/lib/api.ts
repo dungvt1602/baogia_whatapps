@@ -5,7 +5,7 @@ export const apiUrl = (path: string) => (process.env.NEXT_PUBLIC_API_URL || "") 
 
 // Lỗi từ backend, giữ thêm HTTP status để màn hình phân biệt 404 / 429 / lỗi khác (trang công khai NCC).
 // Vẫn là Error nên mọi chỗ cũ `catch (e) { (e as Error).message }` chạy như trước.
-// `body` là JSON phản hồi (nếu có) để màn hình đọc thêm trường như `zalo`, `listError`, `issues`.
+// `body` là JSON phản hồi (nếu có) để màn hình đọc thêm trường như `zalo`, `buttonError`, `issues`.
 export class ApiError extends Error {
   status: number;
   body: Record<string, unknown>;
