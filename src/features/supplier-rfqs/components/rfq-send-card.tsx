@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getJSON, postJSON } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error";
-import { Badge, MissingZaloBadge } from "@/components/shared/badge";
+import { Badge, ZaloReachBadge, zaloReach } from "@/components/shared/badge";
 import { BTN_GHOST, BTN_GREEN, ConfirmDialog } from "@/components/shared/modal";
 import { invitationStatusMeta } from "@/features/supplier-rfqs/utils/status";
 import { resultKind, summarizeResults } from "@/features/supplier-rfqs/utils/send-results";
@@ -62,7 +62,7 @@ export default function RfqSendCard({
     return m;
   }, [invitations]);
 
-  const sendable = (suppliers ?? []).filter((s) => !!s.zaloUserId);
+  const sendable = (suppliers ?? []).filter((s) => zaloReach(s) !== "none");
   const pickedList = (suppliers ?? []).filter((s) => picked.has(s.id));
   const anyInvited = pickedList.some((s) => inviteBySupplier.has(s.id));
   // "Gửi lại" chỉ có nghĩa khi trong số được chọn có NCC đã mời; không bao giờ gửi resend=true nếu không
@@ -111,7 +111,7 @@ export default function RfqSendCard({
         <div className="text-[13px] font-bold text-[#14261A]">Gửi cho nhà cung cấp qua Zalo</div>
         <div className="flex-1" />
         <button type="button" className={BTN_GHOST} disabled={!canSend || sendable.length === 0} onClick={() => updatePicked(new Set(sendable.map((s) => s.id)))}>
-          Chọn tất cả có Zalo
+          Chọn tất cả gửi được
         </button>
         {picked.size > 0 && (
           <button type="button" className={BTN_GHOST} onClick={() => updatePicked(new Set())}>
@@ -127,21 +127,22 @@ export default function RfqSendCard({
         {suppliers == null && <div className="p-4 text-center text-[13px] text-[#8B9A90]">Đang tải...</div>}
         {suppliers != null && suppliers.length === 0 && <div className="p-4 text-center text-[13px] text-[#8B9A90]">Chưa có nhà cung cấp. Thêm ở menu “Nhà cung cấp”.</div>}
         {(suppliers ?? []).map((s) => {
-          const noZalo = !s.zaloUserId;
+          const reach = zaloReach(s);
+          const noZalo = reach === "none";
           const inv = inviteBySupplier.get(s.id);
           const m = inv ? invitationStatusMeta(inv.status) : null;
           return (
             <label
               key={s.id}
               className={`flex items-center gap-3 border-b border-[#EFF3EF] px-3 py-2.5 last:border-b-0 ${noZalo || !canSend ? "cursor-not-allowed bg-[#FAFBFA] opacity-70" : "cursor-pointer hover:bg-[#F3FAF5]"}`}
-              title={noZalo ? "Chưa có Zalo user_id — thêm ở menu Nhà cung cấp để gửi được" : undefined}
+              title={noZalo ? "Chưa có SĐT hoặc Zalo user_id — thêm ở menu Nhà cung cấp để gửi được" : undefined}
             >
               <input type="checkbox" className="h-[18px] w-[18px]" disabled={noZalo || !canSend} checked={picked.has(s.id)} onChange={() => toggle(s.id)} aria-label={`Chọn ${s.name}`} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13.5px] font-semibold text-[#14261A]">{s.name}</div>
-                <div className="truncate text-[12px] text-[#7B8A80]">{s.company || (noZalo ? "Chưa có Zalo user_id" : `Zalo: ${s.zaloUserId}`)}</div>
+                <div className="truncate text-[12px] text-[#7B8A80]">{s.company || (noZalo ? "Chưa có SĐT hoặc Zalo user_id" : reach === "id" ? `Zalo: ${s.zaloUserId}` : `SĐT: ${s.phone}`)}</div>
               </div>
-              {noZalo && <MissingZaloBadge />}
+              <ZaloReachBadge reach={reach} />
               {m && <Badge tone={m.tone}>{m.label}</Badge>}
             </label>
           );

@@ -23,11 +23,29 @@ export function Badge({ tone, children, title }: { tone: BadgeTone; children: Re
   );
 }
 
-// NCC chưa có Zalo user_id thì không gửi được RFQ qua Zalo.
-export function MissingZaloBadge() {
-  return (
-    <Badge tone="amber" title="Chưa có Zalo user_id — không gửi được RFQ qua Zalo">
-      Thiếu Zalo
-    </Badge>
-  );
+/*
+ * BE tự tra SĐT -> Zalo user_id khi gửi, nên NCC gửi được khi có Zalo user_id HOẶC SĐT
+ * (người đó vẫn phải đã quan tâm OA — Zalo bắt buộc, BE báo lỗi dễ hiểu nếu chưa).
+ */
+export type ZaloReach = "id" | "phone" | "none";
+export function zaloReach(s: { phone?: string | null; zaloUserId?: string | null }): ZaloReach {
+  if (s.zaloUserId?.trim()) return "id";
+  if (s.phone?.trim()) return "phone";
+  return "none";
+}
+
+export function ZaloReachBadge({ reach }: { reach: ZaloReach }) {
+  if (reach === "none")
+    return (
+      <Badge tone="amber" title="Chưa có SĐT hoặc Zalo user_id — không gửi được RFQ qua Zalo">
+        Chưa có SĐT/Zalo
+      </Badge>
+    );
+  if (reach === "phone")
+    return (
+      <Badge tone="gray" title="Chưa có Zalo user_id: hệ thống sẽ tra theo SĐT khi gửi (người đó phải đã quan tâm OA)">
+        Gửi bằng SĐT
+      </Badge>
+    );
+  return null;
 }

@@ -6,9 +6,10 @@ import type { RfqInvitation } from "@/features/supplier-rfqs/types";
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status });
 
 const suppliers = [
-  { id: "1", name: "NCC A", company: null, zaloUserId: "111" },
-  { id: "2", name: "NCC B", company: null, zaloUserId: "222" },
-  { id: "3", name: "NCC C", company: null, zaloUserId: null },
+  { id: "1", name: "NCC A", company: null, phone: null, zaloUserId: "111" },
+  { id: "2", name: "NCC B", company: null, phone: null, zaloUserId: "222" },
+  { id: "3", name: "NCC C", company: null, phone: null, zaloUserId: null },
+  { id: "4", name: "NCC D", company: null, phone: "0901234567", zaloUserId: null },
 ];
 const invitedB: RfqInvitation = { id: "9", supplierId: "2", supplierName: "NCC B", status: "SENT", isTest: false, sentAt: null, viewedAt: null, submittedAt: null, error: null };
 
@@ -32,12 +33,26 @@ const renderCard = (extra: Partial<React.ComponentProps<typeof RfqSendCard>> = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("RfqSendCard", () => {
-  it("NCC không có Zalo user_id bị khoá và có badge cảnh báo", async () => {
+  it("NCC chỉ có SĐT chọn được và có nhãn Gửi bằng SĐT; POST gửi supplierIds của NCC đó", async () => {
+    const fn = stub({ results: [{ supplierId: "4", supplierName: "NCC D", ok: false, status: "FAILED", error: "SĐT 0901234567 chưa Quan tâm OA" }] });
+    renderCard();
+    const d = (await screen.findByLabelText("Chọn NCC D")) as HTMLInputElement;
+    expect(d.disabled).toBe(false);
+    expect(screen.getByText("Gửi bằng SĐT")).toBeTruthy();
+    fireEvent.click(d);
+    fireEvent.click(screen.getByText("Gửi qua Zalo (1)"));
+    fireEvent.click(within(screen.getByRole("dialog")).getByText("Gửi cho 1 NCC"));
+    const res = await screen.findByTestId("send-results");
+    expect(res.textContent).toContain("SĐT 0901234567 chưa Quan tâm OA");
+    expect(sentBody(fn)).toEqual({ supplierIds: ["4"] });
+  });
+
+  it("NCC không có SĐT lẫn Zalo user_id bị khoá và có badge cảnh báo", async () => {
     stub();
     renderCard();
     const c = (await screen.findByLabelText("Chọn NCC C")) as HTMLInputElement;
     expect(c.disabled).toBe(true);
-    expect(screen.getByText("Thiếu Zalo")).toBeTruthy();
+    expect(screen.getByText("Chưa có SĐT/Zalo")).toBeTruthy();
     expect((screen.getByLabelText("Chọn NCC A") as HTMLInputElement).disabled).toBe(false);
   });
 

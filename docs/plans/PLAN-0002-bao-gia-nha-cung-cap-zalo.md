@@ -37,5 +37,7 @@ Mọi gọi API qua `src/lib/api.ts` (URL tương đối `/api/...`); route khai
 
 - Sau review (vòng 2): `parseDecimalInput` từ chối số mơ hồ ("25.000"), giới hạn 14.4 chữ số, đơn giá > 0, ngày giao 0..3650; trang công khai khoá tiền tệ theo RFQ, hiện "Đơn giá hiểu là", chống bấm đúp bằng ref; so sánh giá không tô "thấp nhất" khi lẫn tiền tệ; gửi `resend` chỉ khi có NCC đã mời; kết quả `ok`+`error` coi là bỏ qua; `ApiError` mang `body`/`issues`, body không phải JSON thành `Lỗi <status>`; Zalo user_id `^\d{1,50}$`; Modal bỏ qua bấm nền khi busy; `public/sw.js` bỏ qua `/ncc/`; docs/03_API_RULES.md cập nhật.
 
+- Yêu cầu mới của owner: BE tự tra SĐT -> Zalo user_id, nên NCC chỉ cần SĐT HOẶC Zalo user_id (người đó phải đã quan tâm OA). FE: badge "Chưa có SĐT/Zalo" (khi cả hai rỗng) / "Gửi bằng SĐT"; send card chọn được khi có SĐT hoặc user_id; "Nhắn thử" nhận user_id hoặc SĐT và hiện `resolvedUserId`.
+
 ## 6. Rủi ro
 Trang công khai phải dùng được ở webview Zalo (không phụ thuộc localStorage/đăng nhập); BE phải có sẵn các bảng mới mới chạy được; Zalo có thể từ chối tin nếu NCC chưa tương tác OA — FE hiển thị nguyên thông báo lỗi.

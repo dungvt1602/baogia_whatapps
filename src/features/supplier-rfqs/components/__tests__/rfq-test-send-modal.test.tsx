@@ -51,7 +51,7 @@ describe("RfqTestSendModal", () => {
     const fetchMock = stubFetch(() => jsonResponse({ ok: false, mode: "text", error: "User chưa quan tâm OA", zalo: { error: -230 } }));
     render(<RfqTestSendModal rfqId="42" onClose={() => {}} />);
     await screen.findByText("Lê Ngọc Anh — zalo-777");
-    fireEvent.change(screen.getByPlaceholderText("VD: 2512345678901234567"), { target: { value: " 999 " } });
+    fireEvent.change(screen.getByPlaceholderText("VD: 0901234567 hoặc 2512345678901234567"), { target: { value: " 999 " } });
     fireEvent.click(screen.getByText("Gửi thử"));
 
     await screen.findByText("Gửi thử THẤT BẠI");
@@ -65,7 +65,7 @@ describe("RfqTestSendModal", () => {
     stubFetch(() => jsonResponse({ error: "Zalo OA chưa kết nối" }, 400));
     render(<RfqTestSendModal rfqId="42" onClose={() => {}} />);
     await screen.findByText("Lê Ngọc Anh — zalo-777");
-    fireEvent.change(screen.getByPlaceholderText("VD: 2512345678901234567"), { target: { value: "1" } });
+    fireEvent.change(screen.getByPlaceholderText("VD: 0901234567 hoặc 2512345678901234567"), { target: { value: "1" } });
     fireEvent.click(screen.getByText("Gửi thử"));
     await waitFor(() => expect(screen.getByText("Gửi thử THẤT BẠI")).toBeTruthy());
     expect(screen.getAllByText("Zalo OA chưa kết nối").length).toBeGreaterThan(0);
@@ -77,7 +77,7 @@ describe("RfqTestSendModal — lỗi HTTP có body chẩn đoán và validate us
     stubFetch(() => jsonResponse({ error: "Zalo từ chối tin", listError: "Template element invalid", mode: "text", zalo: { error: -201 } }, 400));
     render(<RfqTestSendModal rfqId="42" onClose={() => {}} />);
     await screen.findByText("Lê Ngọc Anh — zalo-777");
-    fireEvent.change(screen.getByPlaceholderText("VD: 2512345678901234567"), { target: { value: "123" } });
+    fireEvent.change(screen.getByPlaceholderText("VD: 0901234567 hoặc 2512345678901234567"), { target: { value: "123" } });
     fireEvent.click(screen.getByText("Gửi thử"));
     await screen.findByText("Gửi thử THẤT BẠI");
     const box = screen.getByTestId("test-send-result").textContent;
@@ -90,9 +90,31 @@ describe("RfqTestSendModal — lỗi HTTP có body chẩn đoán và validate us
     stubFetch(() => jsonResponse({ ok: true }));
     render(<RfqTestSendModal rfqId="42" onClose={() => {}} />);
     await screen.findByText("Lê Ngọc Anh — zalo-777");
-    fireEvent.change(screen.getByPlaceholderText("VD: 2512345678901234567"), { target: { value: "abc123" } });
-    expect(screen.getByText("Zalo user_id chỉ gồm chữ số (tối đa 50 ký tự)")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("VD: 0901234567 hoặc 2512345678901234567"), { target: { value: "abc123" } });
+    expect(screen.getByText(/Nhập Zalo user_id \(chữ số\) hoặc SĐT/)).toBeTruthy();
     expect((screen.getByText("Gửi thử") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("nhận cả SĐT (có +, dấu cách, chấm, gạch) lẫn user_id; gửi nguyên giá trị đã cắt khoảng trắng đầu/cuối", async () => {
+    const fetchMock = stubFetch(() => jsonResponse({ ok: true, mode: "list", resolvedUserId: "55501234", zalo: { error: 0 } }));
+    render(<RfqTestSendModal rfqId="42" onClose={() => {}} />);
+    await screen.findByText("Lê Ngọc Anh — zalo-777");
+    const input = screen.getByPlaceholderText("VD: 0901234567 hoặc 2512345678901234567");
+    for (const v of ["+84 901.234-567", "0901234567", "2512345678901234567"]) {
+      fireEvent.change(input, { target: { value: v } });
+      expect((screen.getByText("Gửi thử") as HTMLButtonElement).disabled, v).toBe(false);
+    }
+    for (const v of ["abc", "090-abc", "1".repeat(51), "+"]) {
+      fireEvent.change(input, { target: { value: v } });
+      expect((screen.getByText("Gửi thử") as HTMLButtonElement).disabled, v).toBe(true);
+    }
+    fireEvent.change(input, { target: { value: " +84 901.234-567 " } });
+    fireEvent.click(screen.getByText("Gửi thử"));
+    await screen.findByText("Gửi thử THÀNH CÔNG");
+    expect(screen.getByText("55501234")).toBeTruthy();
+    expect(screen.getByTestId("test-send-result").textContent).toContain("SĐT đã tra ra Zalo user_id: 55501234");
+    const post = fetchMock.mock.calls.find((c) => c[0] === "/api/supplier-rfqs/42/test-send");
+    expect(JSON.parse((post?.[1] as RequestInit).body as string)).toEqual({ zaloUserId: "+84 901.234-567" });
   });
 });
 

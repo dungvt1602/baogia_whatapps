@@ -17,9 +17,10 @@ export const rfqInfoSchema = z.object({
 });
 export type RfqInfoInput = z.infer<typeof rfqInfoSchema>;
 
-// Zalo user_id theo BE: chỉ chữ số, 1-50 ký tự.
-export const ZALO_USER_ID_RE = /^\d{1,50}$/;
-export const ZALO_USER_ID_MSG = "Zalo user_id chỉ gồm chữ số (tối đa 50 ký tự)";
+// Ô "Nhắn thử" nhận Zalo user_id (chữ số) HOẶC SĐT (+ đầu tuỳ chọn, chữ số, dấu cách . -), tối đa 50 ký tự — khớp BE.
+export const ZALO_TARGET_RE = /^\+?[\d\s.\-]{1,50}$/;
+export const ZALO_TARGET_MSG = "Nhập Zalo user_id (chữ số) hoặc SĐT (chữ số, có thể có + . - và dấu cách), tối đa 50 ký tự";
+export const isZaloTarget = (v: string) => v.length <= 50 && ZALO_TARGET_RE.test(v) && /\d/.test(v);
 
 export const CURRENCY_OPTIONS = ["VND", "USD", "EUR", "CNY", "THB", "INR", "JPY", "KRW"] as const;
 

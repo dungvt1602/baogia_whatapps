@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ApiError, getJSON, postJSON } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error";
 import { BTN_GHOST, BTN_GREEN, FIELD_CLS, LABEL_CLS, Modal } from "@/components/shared/modal";
-import { ZALO_USER_ID_MSG, ZALO_USER_ID_RE } from "@/features/supplier-rfqs/schemas/rfq-schema";
+import { ZALO_TARGET_MSG, isZaloTarget } from "@/features/supplier-rfqs/schemas/rfq-schema";
 import type { TestRecipient, TestSendResponse } from "@/features/supplier-rfqs/types";
 
 /*
@@ -68,6 +68,11 @@ export function TestSendResultView({ outcome }: { outcome: TestOutcome }) {
       <div className={`text-[14px] font-bold ${ok ? "text-[#1F7440]" : "text-[#B3261E]"}`}>{ok ? "Gửi thử THÀNH CÔNG" : "Gửi thử THẤT BẠI"}</div>
       {outcome.kind === "error" && <div className="mt-1 text-[13px] text-[#B3261E]">{outcome.message}</div>}
       {data && !data.ok && data.error && <div className="mt-1 text-[13px] text-[#B3261E]">{data.error}</div>}
+      {data?.resolvedUserId && (
+        <div className="mt-1 text-[13px] text-[#33413A]">
+          SĐT đã tra ra Zalo user_id: <b className="font-mono">{data.resolvedUserId}</b>
+        </div>
+      )}
       {data?.listError && (
         <div className="mt-1 text-[13px] text-[#B3261E]">Định dạng list bị Zalo từ chối: {data.listError}</div>
       )}
@@ -129,7 +134,7 @@ export default function RfqTestSendModal({ rfqId, onClose }: { rfqId: string; on
 
   // Ô nhập tay ưu tiên hơn dropdown.
   const zaloUserId = manual.trim() || selected;
-  const manualInvalid = manual.trim() !== "" && !ZALO_USER_ID_RE.test(manual.trim());
+  const manualInvalid = manual.trim() !== "" && !isZaloTarget(manual.trim());
 
   async function send() {
     if (!zaloUserId) return;
@@ -157,7 +162,7 @@ export default function RfqTestSendModal({ rfqId, onClose }: { rfqId: string; on
   return (
     <Modal title="Nhắn thử qua Zalo" onClose={onClose} maxWidth={560} busy={sending}>
       <div className="mb-3 rounded-[10px] border border-[#F3D9A8] bg-[#FFF8EA] px-3 py-2 text-[12.5px] leading-relaxed text-[#7A4A00]">
-        Tin sẽ được <b>gửi thật</b> tới tài khoản Zalo bên dưới (qua Zalo OA). Dùng để xem tin hiển thị thế nào; lời mời thử không tính vào danh sách nộp giá.
+        Tin sẽ được <b>gửi thật</b> tới tài khoản Zalo bên dưới (qua Zalo OA); người nhận phải đã quan tâm OA. Nhập SĐT thì hệ thống tự tra Zalo user_id. Dùng để xem tin hiển thị thế nào; lời mời thử không tính vào danh sách nộp giá.
       </div>
 
       <label className="mb-3 flex flex-col">
@@ -174,10 +179,10 @@ export default function RfqTestSendModal({ rfqId, onClose }: { rfqId: string; on
       </label>
 
       <label className="mb-4 flex flex-col">
-        <span className={LABEL_CLS}>Hoặc nhập Zalo user_id</span>
-        <input className={FIELD_CLS} value={manual} onChange={(e) => setManual(e.target.value)} placeholder="VD: 2512345678901234567" />
+        <span className={LABEL_CLS}>Hoặc nhập Zalo user_id hoặc SĐT</span>
+        <input className={FIELD_CLS} value={manual} onChange={(e) => setManual(e.target.value)} placeholder="VD: 0901234567 hoặc 2512345678901234567" />
         {manualInvalid ? (
-          <span className="mt-1 text-[11.5px] text-[#B3261E]">{ZALO_USER_ID_MSG}</span>
+          <span className="mt-1 text-[11.5px] text-[#B3261E]">{ZALO_TARGET_MSG}</span>
         ) : (
           <span className="mt-1 text-[11.5px] text-[#6B7A70]">Nếu nhập ô này thì dùng ô này thay cho danh sách nhân viên.</span>
         )}

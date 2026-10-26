@@ -60,6 +60,7 @@ export type RfqSupplierOption = {
   id: string;
   name: string;
   company: string | null;
+  phone?: string | null;
   zaloUserId: string | null;
 };
 
@@ -80,6 +81,7 @@ export type TestSendResponse = {
   link?: string;
   error?: string;
   listError?: string;
+  resolvedUserId?: string; // có khi BE tra SĐT -> Zalo user_id
   zalo?: unknown;
 };
 

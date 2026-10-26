@@ -9,6 +9,10 @@ Hợp đồng đầy đủ do backend giữ: `baogia_be/docs/06_FE_CONTRACT.md`.
 - Không viết `fetch` thô cho JSON. Ngoại lệ có chủ đích: upload ảnh (body thô) và tải file.
 - Route màn hình lấy từ `src/components/layout/routes.ts`, không gõ cứng chuỗi path.
 
+## RFQ qua Zalo: người nhận
+- `POST /api/supplier-rfqs/:id/send`: NCC gửi được khi có `zaloUserId` HOẶC `phone`; BE tra SĐT -> user_id. Lỗi tra (vd. "SĐT … chưa Quan tâm OA …") nằm ở `results[].error`; `ok` + `error` = bỏ qua.
+- `POST /api/supplier-rfqs/:id/test-send`: `zaloUserId` nhận user_id hoặc SĐT (≤ 50 ký tự); phản hồi có thể kèm `resolvedUserId`. Lỗi Zalo/tra vẫn HTTP 200 với `ok:false` + `error`.
+
 ## Error envelope
 
 - Lỗi luôn là JSON `{ "error": "<thông điệp tiếng Việt>" }`.

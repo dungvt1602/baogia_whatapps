@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { getJSON, postJSON, patchJSON, sendJSON } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/api-error";
 import { SkeletonRows } from "@/components/shared/ui";
-import { MissingZaloBadge } from "@/components/shared/badge";
+import { ZaloReachBadge, zaloReach } from "@/components/shared/badge";
 import { BTN_GHOST, BTN_GREEN, ConfirmDialog, FIELD_CLS, LABEL_CLS, Modal } from "@/components/shared/modal";
 import type { Supplier, SupplierForm } from "@/features/suppliers/types";
 import { fieldErrors, supplierSchema } from "@/features/suppliers/schemas/supplier-schema";
@@ -145,7 +145,7 @@ export default function SuppliersScreen() {
     }
   }
 
-  const missingZalo = rows.filter((r) => !r.zaloUserId).length;
+  const missingZalo = rows.filter((r) => zaloReach(r) === "none").length;
 
   return (
     <div>
@@ -162,7 +162,7 @@ export default function SuppliersScreen() {
           />
         </div>
         <div className="text-[12.5px] text-[#7B8A80]">
-          {rows.length} nhà cung cấp{missingZalo ? ` · ${missingZalo} chưa có Zalo` : ""}
+          {rows.length} nhà cung cấp{missingZalo ? ` · ${missingZalo} chưa có SĐT/Zalo` : ""}
         </div>
         <div className="flex-1" />
         <button type="button" className={BTN_GREEN} onClick={openAdd}>
@@ -206,7 +206,7 @@ export default function SuppliersScreen() {
                 <td className={`${TD} max-w-[180px] truncate`} title={s.email || ""}>
                   {s.email || "—"}
                 </td>
-                <td className={`${TD} tabular-nums`}>{s.zaloUserId ? s.zaloUserId : <MissingZaloBadge />}</td>
+                <td className={`${TD} tabular-nums`}>{s.zaloUserId ? s.zaloUserId : <ZaloReachBadge reach={zaloReach(s)} />}</td>
                 <td className={`${TD} max-w-[200px] truncate text-[#7B8A80]`} title={s.note || ""}>
                   {s.note || "—"}
                 </td>
@@ -226,7 +226,7 @@ export default function SuppliersScreen() {
         </table>
       </div>
       <div className="mt-2 text-[11.5px] text-[#8B9A90]">
-        Nhà cung cấp cần có Zalo user_id mới nhận được yêu cầu báo giá qua Zalo (ở menu “Báo giá NCC”).
+        Nhà cung cấp cần có SĐT hoặc Zalo user_id mới nhận được yêu cầu báo giá qua Zalo (ở menu “Báo giá NCC”). Người đó phải đã quan tâm Zalo OA của Ago.
       </div>
 
       {form && (
@@ -242,12 +242,12 @@ export default function SuppliersScreen() {
             </div>
           </div>
           <Field
-            label="Zalo user_id"
+            label="Zalo user_id (tuỳ chọn)"
             value={form.zaloUserId}
             onChange={(v) => setForm({ ...form, zaloUserId: v })}
             placeholder="VD: 2512345678901234567"
             error={errors.zaloUserId}
-            hint="Là mã người dùng Zalo của NCC (không phải số điện thoại). Lấy ở màn Zalo OA (danh sách người đã quan tâm / nhắn tin cho OA) hoặc từ webhook khi NCC nhắn cho OA. NCC phải đã quan tâm hoặc nhắn OA thì Zalo mới cho gửi tin."
+            hint="Không bắt buộc: nếu NCC đã quan tâm Zalo OA và có SĐT ở trên, hệ thống tự tra Zalo user_id theo SĐT khi gửi. Chỉ cần nhập user_id (chữ số, lấy ở màn Zalo OA) khi tra theo SĐT không ra. NCC phải đã quan tâm hoặc nhắn OA thì Zalo mới cho gửi tin."
           />
           <Field label="Ghi chú" value={form.note} onChange={(v) => setForm({ ...form, note: v })} placeholder="Tuỳ chọn" error={errors.note} />
           <div className="mt-1 flex gap-2.5">
