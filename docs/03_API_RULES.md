@@ -13,9 +13,9 @@ Hợp đồng đầy đủ do backend giữ: `baogia_be/docs/06_FE_CONTRACT.md`.
 
 - Lỗi luôn là JSON `{ "error": "<thông điệp tiếng Việt>" }`.
 - Lỗi validate (zod phía backend): `{ "error": "Dữ liệu không hợp lệ", "issues": [...] }` với HTTP 400.
-- `api.ts`: nếu `!res.ok` thì ném `new Error(data?.error || "Lỗi <status>")`. Hiển thị bằng `apiErrorMessage(err, fallback)` qua toast (Sonner) hoặc inline cạnh form.
+- `api.ts`: nếu `!res.ok` thì ném `ApiError` (là `Error`, thêm `status` và `body`) với message `data.error` hoặc `Lỗi <status>`; lỗi zod được nối ô lỗi đầu tiên ("Dữ liệu không hợp lệ: path — message"). Body không phải JSON (HTML 502/504, rỗng) được coi là `{}` -> `Lỗi <status>`, không còn ném lỗi parse. Hiển thị bằng `apiErrorMessage(err, fallback)` qua toast (Sonner) hoặc inline cạnh form.
 - Proxy khi không nối được backend: HTTP **502** `{ "error": "Không kết nối được máy chủ (backend)." }`.
-- Hệ quả: `getJSON` giả định body là JSON; nếu hạ tầng ở giữa trả HTML (vd. 502 của reverse proxy) thì lỗi parse JSON được ném lên — màn hình phải bắt lỗi và báo chung.
+- Hạ tầng ở giữa trả HTML (vd. 502 của reverse proxy) -> `ApiError("Lỗi 502", 502)`; màn hình bắt lỗi và báo chung.
 
 ## Kiểu dữ liệu
 

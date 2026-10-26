@@ -12,3 +12,9 @@ import { cleanup } from "@testing-library/react";
 afterEach(() => {
   cleanup();
 });
+
+/*
+ * jsdom chưa cài window.scrollTo (chỉ in "Not implemented"). Trang công khai nhập giá cuộn lên
+ * đầu sau khi gửi xong -> vá no-op để test không ồn.
+ */
+if (typeof window !== "undefined") window.scrollTo = () => {};

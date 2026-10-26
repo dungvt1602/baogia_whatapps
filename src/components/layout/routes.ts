@@ -9,6 +9,8 @@ export const PATHS: Record<string, string> = {
   new: "/bao-gia/tao",
   tpl: "/template",
   send: "/gui-bao-gia",
+  suppliers: "/nha-cung-cap", // danh bạ nhà cung cấp (RFQ)
+  rfqs: "/bao-gia-ncc", // yêu cầu báo giá gửi NCC qua Zalo (+ /bao-gia-ncc/[id])
   team: "/nguoi-dung",
   channels: "/kenh-gui",
   receiveChannels: "/kenh-nhan",

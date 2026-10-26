@@ -59,15 +59,17 @@ baogia_whatapps/
     │   ├── layout.tsx         # layout gốc: font, AuthProvider, Toaster, PWA, ActorHeaders
     │   ├── page.tsx           # "/" -> redirect /tong-quan
     │   ├── (auth)/login/
+    │   ├── (public)/ncc/[token]/  # trang công khai NCC nhập giá (layout riêng, không auth/sidebar)
     │   ├── (app)/             # layout.tsx chặn chưa đăng nhập + AppChrome; mỗi thư mục = 1 màn
     │   └── api/[...path]/     # proxy (+ __tests__)
     ├── features/
     │   ├── auth/ channels/ customers/ dashboard/ inbox/ logs/ quotes/
     │   ├── receive-channels/ send/ sendjobs/ templates/ users/ zalo/
+    │   ├── suppliers/ supplier-rfqs/   # RFQ qua Zalo (+ supplier-rfqs/public = form công khai)
     │   └── mock/              # prototype còn sót (3 route /bao-gia/tao|mau|chi-tiet)
     ├── components/
     │   ├── layout/            # app-chrome, ago-context, routes.ts, use-ago, state, data (mock)
-    │   └── shared/            # ui.tsx, country-select, actor-headers, register-sw
+    │   └── shared/            # ui.tsx, modal.tsx, badge.tsx, country-select, actor-headers, register-sw
     ├── lib/                   # api, api-error, auth, countries, phone-type-meta, activity-labels, supabase
     └── test/                  # setup.ts của Vitest
 ```

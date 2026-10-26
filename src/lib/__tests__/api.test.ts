@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiUrl, getJSON, patchJSON, postJSON, putJSON, sendJSON } from "@/lib/api";
+import { ApiError, apiUrl, getJSON, patchJSON, postJSON, putJSON, sendJSON } from "@/lib/api";
 
 // Trả về Response giả; fetch luôn được mock, test không chạm mạng thật.
 function jsonResponse(body: unknown, status = 200) {
@@ -43,9 +43,25 @@ describe("getJSON", () => {
     await expect(getJSON("/api/x")).rejects.toThrow("Lỗi 500");
   });
 
-  it("body lỗi không phải JSON thì lỗi parse được ném ra (không nuốt)", async () => {
+  it("body lỗi không phải JSON (HTML 502) thành ApiError 'Lỗi 502' kèm status, không phải lỗi parse", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>Bad gateway</html>", { status: 502 })));
-    await expect(getJSON("/api/x")).rejects.toThrow();
+    const err = (await getJSON("/api/x").catch((e) => e)) as ApiError;
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe("Lỗi 502");
+    expect(err.status).toBe(502);
+  });
+
+  it("body rỗng với status lỗi cũng ra 'Lỗi <status>'", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 504 })));
+    await expect(getJSON("/api/x")).rejects.toThrow("Lỗi 504");
+  });
+
+  it("lỗi zod: nối ô lỗi đầu tiên và giữ body/issues", async () => {
+    const issues = [{ path: ["items", 0, "unitPrice"], message: "Phải lớn hơn 0" }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "Dữ liệu không hợp lệ", issues }, 400)));
+    const err = (await sendJSON("POST", "/api/x", {}).catch((e) => e)) as ApiError;
+    expect(err.message).toBe("Dữ liệu không hợp lệ: items.0.unitPrice — Phải lớn hơn 0");
+    expect(err.body.issues).toEqual(issues);
   });
 });
 
@@ -89,5 +105,22 @@ describe("sendJSON", () => {
     await putJSON("/api/b", {});
     await patchJSON("/api/c", {});
     expect(fetchMock.mock.calls.map((c) => c[1].method)).toEqual(["POST", "PUT", "PATCH"]);
+  });
+});
+
+describe("ApiError", () => {
+  it("giữ HTTP status để màn hình phân biệt 404 / 429, vẫn là Error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "Link không hợp lệ" }, 404)));
+    const err = await getJSON("/api/x").catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
+    expect((err as ApiError).message).toBe("Link không hợp lệ");
+  });
+
+  it("sendJSON cũng ném ApiError kèm status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ error: "Quá nhanh" }, 429)));
+    const err = await sendJSON("POST", "/api/x", {}).catch((e) => e);
+    expect((err as ApiError).status).toBe(429);
   });
 });

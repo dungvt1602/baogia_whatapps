@@ -16,6 +16,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+  // Trang công khai NCC (/ncc/<token>): token là bí mật, không cache và không rơi về trang offline.
+  if (url.pathname.startsWith("/ncc/")) return;
 
   event.respondWith(
     fetch(req)

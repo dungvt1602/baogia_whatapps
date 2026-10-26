@@ -113,6 +113,8 @@ export function useAgo() {
     { key: "customers", label: "Khách hàng", icon: "◎" },
     { key: "tpl", label: "Template", icon: "❖" },
     { key: "send", label: "Gửi báo giá", icon: "📤" },
+    { key: "suppliers", label: "Nhà cung cấp", icon: "🏭" },
+    { key: "rfqs", label: "Báo giá NCC", icon: "📨" },
     ...(isAdmin
       ? [
           { key: "team", label: "Người dùng", icon: "☖" },
@@ -143,6 +145,8 @@ export function useAgo() {
     new: ["Tạo báo giá", "Điền thông tin và gửi ngay qua kênh chat"],
     tpl: ["Quản lý template", "Mỗi template gắn 1 bảng giá và danh sách khách nhận"],
     send: ["Gửi báo giá", "Chọn template và gửi cho khách hàng của nó"],
+    suppliers: ["Nhà cung cấp", "Danh bạ NCC — Zalo user_id để gửi yêu cầu báo giá"],
+    rfqs: ["Báo giá nhà cung cấp", "Gửi yêu cầu báo giá cho NCC qua Zalo, thu giá và so sánh"],
     products: ["Sản phẩm", "Kho sản phẩm dùng chung — chỉnh giá & thông tin"],
   };
 
@@ -207,7 +211,7 @@ export function useAgo() {
     detailCols: narrow ? "1fr" : "minmax(0,1.5fr) minmax(0,1fr)",
     colDisplay: st.w < 760 ? "none" : "block",
     newBtnStyle:
-      tiny || ["channels", "receiveChannels", "zalo", "logs", "sendjobs", "inbox", "send", "products", "customers", "team"].includes(page) || (page === "tpl" && !st.tplQuoteId)
+      tiny || ["channels", "receiveChannels", "zalo", "logs", "sendjobs", "inbox", "send", "products", "customers", "team", "suppliers", "rfqs"].includes(page) || (page === "tpl" && !st.tplQuoteId)
         ? "display:none"
         : "height:40px; padding:0 16px; border:none; border-radius:11px; background:linear-gradient(140deg,#3EA85C,#1F7440); color:#fff; font-size:13.5px; font-weight:600; cursor:pointer; white-space:nowrap; box-shadow:0 8px 18px -9px rgba(31,116,64,.8)",
     newBtnLabel: page === "team" ? "+ Thêm người dùng" : page === "customers" ? "+ Thêm khách hàng" : page === "tpl" ? "+ Template mới" : "+ Báo giá mới",

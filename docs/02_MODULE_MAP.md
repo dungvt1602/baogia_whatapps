@@ -24,6 +24,10 @@ Vào `/` tự chuyển tới `/tong-quan`; chưa đăng nhập thì layout `(app
 | Kênh nhận (admin) | `/kenh-nhan` | `receiveChannels` | `receive-channels/components/receive-channels-screen.tsx` | `receive-channels`: `GET/POST /api/receive-channels`, `PATCH/DELETE /:id` |
 | Người dùng (admin) | `/nguoi-dung` | `team` | `users/components/users-screen.tsx` | `users`: `GET/POST /api/users`, `PATCH/DELETE /:id`, `GET/DELETE /:id/zalo`, `POST /:id/zalo/link-code` |
 | Zalo OA (admin) | `/zalo-oa` | `zalo` | `zalo/components/zalo-screen.tsx` | `zalo`: `GET /status`, `POST /check`, `/disconnect`, `/refresh`, `/test`, `/oauth/start`, `/oauth/exchange`, `GET /senders`, `/shared-users`; `cron`: `/zalo-token`; `receive-channels` |
+| Nhà cung cấp | `/nha-cung-cap` | `suppliers` | `suppliers/components/suppliers-screen.tsx` (+ `schemas/supplier-schema.ts`, `utils/supplier-payload.ts`) | `suppliers`: `GET/POST /api/suppliers`, `PATCH/DELETE /:id` |
+| Báo giá NCC (danh sách + tạo) | `/bao-gia-ncc` | `rfqs` | `supplier-rfqs/components/rfq-list-screen.tsx`, `rfq-create-modal.tsx` | `supplier-rfqs`: `GET/POST /api/supplier-rfqs` |
+| Chi tiết báo giá NCC | `/bao-gia-ncc/[id]` | `rfqs` | `supplier-rfqs/components/rfq-detail-screen.tsx` (+ `rfq-image-card`, `rfq-send-card`, `rfq-invitations-table`, `rfq-compare-panel`, `rfq-test-send-modal`) | `supplier-rfqs`: `GET/PATCH/DELETE /:id`, `PUT /:id/items`, `POST/DELETE/GET /:id/image`, `POST /:id/send`, `POST /:id/close`, `GET /test-recipients`, `POST /:id/test-send`, `GET /:id/compare`; `suppliers`: `GET /api/suppliers` |
+| Trang công khai NCC nhập giá (không đăng nhập) | `/ncc/[token]` | — | `supplier-rfqs/public/public-quote-page.tsx` (+ `quote-form.ts`) | `GET /api/public/supplier-rfq/:token`, `POST /api/public/supplier-rfq/:token/quote` |
 | Kích hoạt Zalo (modal ở sidebar) | — (mọi trang) | — | `zalo/components/zalo-activate-modal.tsx` | `users`: `/:id/zalo`, `/:id/zalo/link-code` |
 | Nhật ký (admin) | `/nhat-ky` | `logs` | `logs/components/logs-screen.tsx` | `activity`: `GET /api/activity` |
 | Tạo báo giá / Chọn mẫu / Chi tiết (prototype) | `/bao-gia/tao`, `/bao-gia/mau`, `/bao-gia/chi-tiet` | `new`, `template`, `detail` | `mock/components/*` | Chưa nối API (dữ liệu giả) |
@@ -46,6 +50,8 @@ Vào `/` tự chuyển tới `/tong-quan`; chưa đăng nhập thì layout `(app
 | Gọi API, lỗi | `src/lib/api.ts`, `src/lib/api-error.ts` |
 | Session, role | `src/lib/auth.tsx` |
 | Danh sách route, menu | `src/components/layout/routes.ts`, `use-ago.ts` |
+| Modal, hộp xác nhận, class form | `src/components/shared/modal.tsx` |
+| Badge trạng thái | `src/components/shared/badge.tsx` |
 | Gắn `x-actor-*` | `src/components/shared/actor-headers.tsx` |
 | Chọn quốc gia / mã vùng | `src/components/shared/country-select.tsx`, `src/lib/countries.ts` |
 | Nhãn loại số điện thoại | `src/lib/phone-type-meta.ts` |

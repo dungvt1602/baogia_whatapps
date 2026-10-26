@@ -63,9 +63,10 @@ CI (`.github/workflows/ci.yml`) chạy `lint → test → build` trên push/PR v
 
 ## Tính năng chính
 
-- Đăng nhập; menu theo vai trò: mọi người thấy Tổng quan, Khách hàng, Template, Gửi báo giá; **admin** thêm Người dùng, Kênh gửi, Kênh nhận, Zalo OA, Log gửi, Phản hồi, Nhật ký.
+- Đăng nhập; menu theo vai trò: mọi người thấy Tổng quan, Khách hàng, Template, Gửi báo giá, Nhà cung cấp, Báo giá NCC; **admin** thêm Người dùng, Kênh gửi, Kênh nhận, Zalo OA, Log gửi, Phản hồi, Nhật ký.
 - Gửi báo giá: xem trước → xác nhận → theo dõi tiến độ, có cảnh báo hạn mức Meta.
 - Quản lý khách hàng (lọc, import Excel, phân loại số di động/máy bàn), template WhatsApp có ảnh header.
+- Báo giá nhà cung cấp (RFQ): gửi yêu cầu báo giá kèm ảnh cho NCC qua Zalo, NCC nhập giá ở trang công khai `/ncc/<token>` (không đăng nhập), nút "Nhắn thử", so sánh giá.
 - Nhận phản hồi khách và báo về Zalo; nút "Kích hoạt Zalo" (mã 6 số) cho người nhận.
 - PWA cài được lên điện thoại.
 

@@ -35,7 +35,14 @@ let cacheReady = false;
 function getSessionSnapshot(): Session {
   // getSnapshot phải trả reference ỔN ĐỊNH khi dữ liệu không đổi -> memo theo chuỗi raw
   // (nếu parse mới mỗi lần sẽ gây vòng lặp render vô hạn).
-  const raw = localStorage.getItem(KEY);
+  // Webview (vd. Zalo in-app) có thể chặn localStorage -> getItem ném lỗi. Trang công khai
+  // /ncc/[token] cũng nằm dưới AuthProvider nên KHÔNG được để lỗi này làm sập trang.
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(KEY);
+  } catch {
+    raw = null;
+  }
   if (!cacheReady || raw !== cachedRaw) {
     cachedRaw = raw;
     try {
