@@ -39,7 +39,7 @@ Mọi gọi API qua `src/lib/api.ts` (URL tương đối `/api/...`); route khai
 
 - Yêu cầu mới của owner: BE tự tra SĐT -> Zalo user_id, nên NCC chỉ cần SĐT HOẶC Zalo user_id (người đó phải đã quan tâm OA). FE: badge "Chưa có SĐT/Zalo" (khi cả hai rỗng) / "Gửi bằng SĐT"; send card chọn được khi có SĐT hoặc user_id; "Nhắn thử" nhận user_id hoặc SĐT và hiện `resolvedUserId`.
 
-- Định dạng tin Zalo mới: (tuỳ chọn) tin ảnh trước, rồi tin chữ kèm nút "Nhập giá", dự phòng chữ + link. `test-send` trả `mode: "buttons"|"text"`, `buttonError`, `imageSent`, `imageError`, `resolvedUserId` (bỏ `list`/`listError`); FE hiện nhãn mode (mode lạ -> nhãn trung tính), trạng thái ảnh, lỗi nút kèm gợi ý tên miền xác minh.
+- Định dạng tin Zalo mới: tin chữ kèm nút "Nhập giá" + dòng link dự phòng (Zalo PC không vẽ nút); ảnh RFQ KHÔNG gửi vào chat Zalo, chỉ hiển thị trong form NCC. `test-send` trả `mode: "buttons"|"text"`, `buttonError`, `resolvedUserId` (bỏ `list`/`listError`); FE hiện nhãn mode (mode lạ -> nhãn trung tính), lỗi nút kèm gợi ý tên miền xác minh.
 
 ## 6. Rủi ro
 Trang công khai phải dùng được ở webview Zalo (không phụ thuộc localStorage/đăng nhập); BE phải có sẵn các bảng mới mới chạy được; Zalo có thể từ chối tin nếu NCC chưa tương tác OA — FE hiển thị nguyên thông báo lỗi.

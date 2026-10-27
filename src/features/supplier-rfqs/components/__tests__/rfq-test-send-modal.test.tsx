@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import RfqTestSendModal, { TestSendResultView, imageStatus, modeLabel, safeHref } from "@/features/supplier-rfqs/components/rfq-test-send-modal";
+import RfqTestSendModal, { TestSendResultView, modeLabel, safeHref } from "@/features/supplier-rfqs/components/rfq-test-send-modal";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -26,7 +26,7 @@ afterEach(() => {
 
 describe("RfqTestSendModal", () => {
   it("chọn nhân viên, gửi thử thành công: hiện mode, link và phản hồi thô của Zalo", async () => {
-    const fetchMock = stubFetch(() => jsonResponse({ ok: true, mode: "buttons", imageSent: true, link: "https://app.example.com/ncc/abc", zalo: { error: 0, message: "Success" } }));
+    const fetchMock = stubFetch(() => jsonResponse({ ok: true, mode: "buttons", link: "https://app.example.com/ncc/abc", zalo: { error: 0, message: "Success" } }));
     render(<RfqTestSendModal rfqId="42" onClose={() => {}} />);
 
     await screen.findByText("Lê Ngọc Anh — zalo-777");
@@ -40,7 +40,6 @@ describe("RfqTestSendModal", () => {
     await screen.findByText("Gửi thử THÀNH CÔNG");
     expect(screen.getByText("buttons")).toBeTruthy();
     expect(screen.getByTestId("test-send-result").textContent).toContain("Tin chữ kèm nút bấm «Nhập giá»");
-    expect(screen.getByTestId("image-status").textContent).toBe("Ảnh: Đã gửi ảnh");
     expect(screen.getByText("https://app.example.com/ncc/abc")).toBeTruthy();
     expect(screen.getByText("Mở thử form").getAttribute("href")).toBe("https://app.example.com/ncc/abc");
     expect(screen.getByTestId("test-send-result").textContent).toContain('"message": "Success"');
@@ -76,7 +75,7 @@ describe("RfqTestSendModal", () => {
 
 describe("RfqTestSendModal — lỗi HTTP có body chẩn đoán và validate user_id", () => {
   it("HTTP 400 mang zalo + buttonError: vẫn hiện hộp chẩn đoán đầy đủ", async () => {
-    stubFetch(() => jsonResponse({ error: "Zalo từ chối tin", buttonError: "Template element invalid", mode: "text", imageError: "Ảnh quá lớn", zalo: { error: -201 } }, 400));
+    stubFetch(() => jsonResponse({ error: "Zalo từ chối tin", buttonError: "Template element invalid", mode: "text", zalo: { error: -201 } }, 400));
     render(<RfqTestSendModal rfqId="42" onClose={() => {}} />);
     await screen.findByText("Lê Ngọc Anh — zalo-777");
     fireEvent.change(screen.getByPlaceholderText("VD: 0901234567 hoặc 2512345678901234567"), { target: { value: "123" } });
@@ -85,7 +84,6 @@ describe("RfqTestSendModal — lỗi HTTP có body chẩn đoán và validate us
     const box = screen.getByTestId("test-send-result").textContent;
     expect(box).toContain("Nút bấm bị Zalo từ chối: Template element invalid");
     expect(box).toContain("tên miền đã xác minh");
-    expect(box).toContain("Không gửi được ảnh: Ảnh quá lớn");
     expect(box).toContain("Tin chữ kèm link (dự phòng");
     expect(box).toContain("Zalo từ chối tin");
     expect(box).toContain('"error": -201');
@@ -123,25 +121,17 @@ describe("RfqTestSendModal — lỗi HTTP có body chẩn đoán và validate us
   });
 });
 
-describe("modeLabel / imageStatus / mode lạ", () => {
+describe("modeLabel / mode lạ", () => {
   it("nhãn mode và mode lạ trung tính", () => {
     expect(modeLabel("buttons")).toBe("Tin chữ kèm nút bấm «Nhập giá»");
     expect(modeLabel("text")).toContain("dự phòng");
     expect(modeLabel("carousel")).toBe("Kiểu tin khác: carousel");
   });
 
-  it("trạng thái ảnh: đã gửi / chưa có ảnh / lỗi / không rõ", () => {
-    expect(imageStatus({ imageSent: true })).toEqual({ text: "Đã gửi ảnh", ok: true });
-    expect(imageStatus({ imageSent: false })).toEqual({ text: "RFQ chưa có ảnh", ok: true });
-    expect(imageStatus({ imageSent: false, imageError: "x" })).toEqual({ text: "Không gửi được ảnh: x", ok: false });
-    expect(imageStatus({})).toBeNull();
-  });
-
-  it("render với mode lạ không sập và hiện 'RFQ chưa có ảnh'", () => {
-    render(<TestSendResultView outcome={{ kind: "result", data: { ok: true, mode: "carousel", imageSent: false } }} />);
+  it("render với mode lạ không sập", () => {
+    render(<TestSendResultView outcome={{ kind: "result", data: { ok: true, mode: "carousel" } }} />);
     expect(screen.getByText("Gửi thử THÀNH CÔNG")).toBeTruthy();
     expect(screen.getByTestId("test-send-result").textContent).toContain("Kiểu tin khác: carousel");
-    expect(screen.getByTestId("image-status").textContent).toBe("Ảnh: RFQ chưa có ảnh");
   });
 });
 

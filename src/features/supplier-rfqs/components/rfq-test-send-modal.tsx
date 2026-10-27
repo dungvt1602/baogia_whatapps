@@ -23,14 +23,6 @@ export function modeLabel(mode: string): string {
   return `Kiểu tin khác: ${mode}`; // mode lạ: nhãn trung tính, không để sập
 }
 
-// null = không có thông tin ảnh để hiện (BE cũ không trả imageSent).
-export function imageStatus(d: { imageSent?: boolean; imageError?: string }): { text: string; ok: boolean } | null {
-  if (d.imageError) return { text: `Không gửi được ảnh: ${d.imageError}`, ok: false };
-  if (d.imageSent === true) return { text: "Đã gửi ảnh", ok: true };
-  if (d.imageSent === false) return { text: "RFQ chưa có ảnh", ok: true };
-  return null;
-}
-
 export function formatRaw(v: unknown): string {
   if (v == null) return "(không có)";
   if (typeof v === "string") return v;
@@ -92,11 +84,6 @@ export function TestSendResultView({ outcome }: { outcome: TestOutcome }) {
       {data?.mode && (
         <div className="mt-2 text-[13px] text-[#33413A]">
           Kiểu tin đã dùng (mode <b>{data.mode}</b>): {modeLabel(data.mode)}
-        </div>
-      )}
-      {data && imageStatus(data) && (
-        <div className={`mt-1 text-[13px] ${imageStatus(data)?.ok ? "text-[#33413A]" : "text-[#B3261E]"}`} data-testid="image-status">
-          Ảnh: {imageStatus(data)?.text}
         </div>
       )}
       {data?.link && (
@@ -161,12 +148,12 @@ export default function RfqTestSendModal({ rfqId, onClose }: { rfqId: string; on
       const data = await postJSON<TestSendResponse>(`/api/supplier-rfqs/${rfqId}/test-send`, { zaloUserId });
       setOutcome({ kind: "result", data });
     } catch (e) {
-      // Lỗi HTTP 4xx/5xx từ BE vẫn có thể mang `zalo`/`buttonError`/`mode`/`link`/`imageSent` trong body -> giữ lại để chẩn đoán.
+      // Lỗi HTTP 4xx/5xx từ BE vẫn có thể mang `zalo`/`buttonError`/`mode`/`link` trong body -> giữ lại để chẩn đoán.
       if (e instanceof ApiError && Object.keys(e.body).length > 0) {
         const b = e.body as Partial<TestSendResponse>;
         setOutcome({
           kind: "result",
-          data: { ok: false, mode: b.mode, link: b.link, error: e.message, buttonError: b.buttonError, imageSent: b.imageSent, imageError: b.imageError, resolvedUserId: b.resolvedUserId, zalo: b.zalo },
+          data: { ok: false, mode: b.mode, link: b.link, error: e.message, buttonError: b.buttonError, resolvedUserId: b.resolvedUserId, zalo: b.zalo },
         });
       } else {
         setOutcome({ kind: "error", message: apiErrorMessage(e, "Không gửi thử được") });

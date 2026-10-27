@@ -82,8 +82,6 @@ export type TestSendResponse = {
   link?: string;
   error?: string;
   buttonError?: string; // Zalo từ chối tin có nút -> BE rơi về text
-  imageSent?: boolean;
-  imageError?: string;
   resolvedUserId?: string; // có khi BE tra SĐT -> Zalo user_id
   zalo?: unknown;
 };
