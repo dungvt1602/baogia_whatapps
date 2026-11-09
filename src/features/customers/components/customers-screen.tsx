@@ -153,6 +153,7 @@ export default function CustomersScreen() {
   const [market, setMarket] = useState("");            // lọc theo quốc gia (server-side)
   const [markets, setMarkets] = useState<string[]>([]); // danh sách quốc gia cho dropdown
   const [phoneType, setPhoneType] = useState("");       // lọc theo loại số (server-side)
+  const [waStatus, setWaStatus] = useState("");         // lọc theo trạng thái WhatsApp (server-side): NO_WHATSAPP = số đã báo fail 131026
   const [total, setTotal] = useState(0);                // tổng số khách khớp bộ lọc (server đếm)
   const [debouncedQ, setDebouncedQ] = useState("");     // từ khoá đã chờ gõ xong -> mới gọi server
   const [exporting, setExporting] = useState(false);
@@ -167,6 +168,7 @@ export default function CustomersScreen() {
       const p = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort: sort.key, dir: sort.dir });
       if (market) p.set("market", market);
       if (phoneType) p.set("phoneType", phoneType);
+      if (waStatus) p.set("waStatus", waStatus);
       if (debouncedQ) p.set("search", debouncedQ);
       const r = await getJSON<{ items: Customer[]; total: number }>(`/api/customers/search?${p.toString()}`);
       if (my !== reqId.current) return;
@@ -180,7 +182,7 @@ export default function CustomersScreen() {
     } finally {
       if (my === reqId.current) setLoading(false);
     }
-  }, [page, market, phoneType, debouncedQ, sort]);
+  }, [page, market, phoneType, waStatus, debouncedQ, sort]);
   useEffect(() => {
     (async () => { await load(); })();
   }, [load]);
@@ -220,13 +222,14 @@ export default function CustomersScreen() {
   // Đổi bộ lọc/tìm kiếm là bỏ chọn, nên "đã chọn đủ total" = đã chọn tất cả khách khớp bộ lọc.
   const allChecked = paged.length > 0 && paged.every((c) => selected.has(c.id));
   const allViewChecked = total > 0 && selected.size === total;
-  const filtered = !!(debouncedQ || market || phoneType);
+  const filtered = !!(debouncedQ || market || phoneType || waStatus);
   function toggleAll() { const s = new Set(selected); if (allChecked) paged.forEach((c) => s.delete(c.id)); else paged.forEach((c) => s.add(c.id)); setSelected(s); }
   async function selectAllView() {
     try {
       const p = new URLSearchParams({ idsOnly: "1" });
       if (market) p.set("market", market);
       if (phoneType) p.set("phoneType", phoneType);
+      if (waStatus) p.set("waStatus", waStatus);
       if (debouncedQ) p.set("search", debouncedQ);
       const r = await getJSON<{ ids: string[] }>(`/api/customers/search?${p.toString()}`);
       setSelected(new Set(r.ids));
@@ -378,6 +381,11 @@ export default function CustomersScreen() {
         <select value={phoneType} onChange={(e) => { setPhoneType(e.target.value); setPage(1); clearSelection(); }} style={sx(`${inp} height:34px; width:150px; padding:0 8px`)} title="Lọc theo loại số">
           <option value="">📱 Tất cả loại số</option>
           {PHONE_TYPE_OPTIONS.map((t) => <option key={t} value={t}>{PHONE_TYPE_META[t].label}</option>)}
+        </select>
+        <select value={waStatus} onChange={(e) => { setWaStatus(e.target.value); setPage(1); clearSelection(); }} style={sx(`${inp} height:34px; width:170px; padding:0 8px`)} title="Lọc theo kết quả gửi WhatsApp">
+          <option value="">💬 Mọi trạng thái WhatsApp</option>
+          <option value="NO_WHATSAPP">Không có WhatsApp</option>
+          <option value="OK">Chưa bị đánh dấu</option>
         </select>
         <div style={sx("font-size:12.5px; color:#7B8A80")}>{total} khách hàng{selected.size ? ` · chọn ${selected.size}` : ""}</div>
         <div style={sx("flex:1")} />
