@@ -154,6 +154,22 @@ export default function CustomersScreen() {
   const [markets, setMarkets] = useState<string[]>([]); // danh sách quốc gia cho dropdown
   const [phoneType, setPhoneType] = useState("");       // lọc theo loại số (server-side)
   const [waStatus, setWaStatus] = useState("");         // lọc theo trạng thái WhatsApp (server-side): NO_WHATSAPP = số đã báo fail 131026
+  // Chuẩn hoá danh sách quốc gia cho dropdown lọc: gộp trùng (INDIA/India/KOREA...) + tên chuẩn.
+  const marketOptions = useMemo(() => {
+    // value = khoá gộp (iso2 hoặc chữ thường); raws = MỌI cách ghi của nước đó trong dữ liệu (IN / India / INDIA...).
+    const map = new Map<string, { value: string; label: string; raws: string[] }>();
+    for (const raw of markets) {
+      if (!raw) continue;
+      const c = findCountry(raw);
+      const key = c ? c.iso2 : raw.toLowerCase();
+      const cur = map.get(key);
+      if (cur) { if (!cur.raws.includes(raw)) cur.raws.push(raw); }
+      else map.set(key, { value: key, label: c ? c.name : raw, raws: [raw] });
+    }
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, "vi"));
+  }, [markets]);
+  // Giá trị gửi lên server: tất cả cách ghi của nước đang chọn, ngăn bằng "|" (server khớp không phân biệt hoa thường).
+  const marketParam = useMemo(() => marketOptions.find((o) => o.value === market)?.raws.join("|") ?? market, [marketOptions, market]);
   const [total, setTotal] = useState(0);                // tổng số khách khớp bộ lọc (server đếm)
   const [debouncedQ, setDebouncedQ] = useState("");     // từ khoá đã chờ gõ xong -> mới gọi server
   const [exporting, setExporting] = useState(false);
@@ -166,7 +182,7 @@ export default function CustomersScreen() {
     setLoading(true);
     try {
       const p = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort: sort.key, dir: sort.dir });
-      if (market) p.set("market", market);
+      if (marketParam) p.set("market", marketParam);
       if (phoneType) p.set("phoneType", phoneType);
       if (waStatus) p.set("waStatus", waStatus);
       if (debouncedQ) p.set("search", debouncedQ);
@@ -182,7 +198,7 @@ export default function CustomersScreen() {
     } finally {
       if (my === reqId.current) setLoading(false);
     }
-  }, [page, market, phoneType, waStatus, debouncedQ, sort]);
+  }, [page, marketParam, phoneType, waStatus, debouncedQ, sort]);
   useEffect(() => {
     (async () => { await load(); })();
   }, [load]);
@@ -201,18 +217,6 @@ export default function CustomersScreen() {
     (async () => { await loadMarkets(); })();
   }, [loadMarkets]);
 
-  // Chuẩn hoá danh sách quốc gia cho dropdown lọc: gộp trùng (INDIA/India/KOREA...) + tên chuẩn.
-  const marketOptions = useMemo(() => {
-    const map = new Map<string, { value: string; label: string }>();
-    for (const raw of markets) {
-      if (!raw) continue;
-      const c = findCountry(raw);
-      const key = c ? c.iso2 : raw.toLowerCase();
-      if (!map.has(key)) map.set(key, { value: raw, label: c ? c.name : raw });
-    }
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, "vi"));
-  }, [markets]);
-
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const curPage = Math.min(page, totalPages);
   const paged = rows; // server đã trả đúng 1 trang
@@ -227,7 +231,7 @@ export default function CustomersScreen() {
   async function selectAllView() {
     try {
       const p = new URLSearchParams({ idsOnly: "1" });
-      if (market) p.set("market", market);
+      if (marketParam) p.set("market", marketParam);
       if (phoneType) p.set("phoneType", phoneType);
       if (waStatus) p.set("waStatus", waStatus);
       if (debouncedQ) p.set("search", debouncedQ);
@@ -341,7 +345,7 @@ export default function CustomersScreen() {
     setExporting(true);
     try {
       const p = new URLSearchParams({ sort: sort.key, dir: sort.dir });
-      if (market) p.set("market", market);
+      if (marketParam) p.set("market", marketParam);
       if (phoneType) p.set("phoneType", phoneType);
       if (debouncedQ) p.set("search", debouncedQ);
       const all = await getJSON<Customer[]>(`/api/customers?${p.toString()}`);
